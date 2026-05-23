@@ -22,7 +22,7 @@ type Order = {
   id: string
   order_number: number
   product: string
-  customers?: { name: string }
+  customers?: { name: string; phone: string }
 }
 
 const statusOptions = [
@@ -61,9 +61,9 @@ export default function Shipments() {
   async function fetchOrders() {
     const { data } = await supabase
       .from('orders')
-      .select('id, order_number, product, customers(name)')
+      .select('id, order_number, product, customers(name, phone)')
       .eq('status', 'paid')
-    setOrders(data || [])
+    setOrders((data || []) as Order[])
   }
 
   async function addShipment() {
@@ -117,19 +117,15 @@ export default function Shipments() {
                   <option key={o.id} value={o.id}>#{o.order_number} — {o.customers?.name} — {o.product}</option>
                 ))}
               </select>
-
               <input placeholder="כתובת מלאה *" value={form.address}
                 onChange={e => setForm({...form, address: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm col-span-2" />
-
               <input placeholder="מספר מעקב" value={form.tracking_number}
                 onChange={e => setForm({...form, tracking_number: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
               <input placeholder="חברת משלוחים" value={form.courier}
                 onChange={e => setForm({...form, courier: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
               <select value={form.status}
                 onChange={e => setForm({...form, status: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm col-span-2">
@@ -138,7 +134,6 @@ export default function Shipments() {
                 ))}
               </select>
             </div>
-
             <div className="flex gap-3 mt-4">
               <button onClick={addShipment}
                 className="bg-orange-500 text-white px-6 py-2 rounded-lg text-sm font-medium">
@@ -175,7 +170,7 @@ export default function Shipments() {
                         <p className="text-sm text-gray-500">{s.address}</p>
                         {s.tracking_number && (
                           <p className="text-xs text-blue-600 mt-1">
-                            🔍 מספר מעקב: {s.tracking_number} {s.courier && `| ${s.courier}`}
+                            🔍 {s.tracking_number} {s.courier && `| ${s.courier}`}
                           </p>
                         )}
                       </div>
