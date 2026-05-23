@@ -1,65 +1,162 @@
-import Image from "next/image";
+'use client'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard } from 'lucide-react'
 
-export default function Home() {
+export default function Dashboard() {
+  const [stats, setStats] = useState({
+    todayOrders: 0,
+    pendingPayment: 0,
+    shipped: 0,
+    monthlyRevenue: 0,
+    totalCustomers: 0,
+    completed: 0
+  })
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  async function fetchStats() {
+    const today = new Date().toISOString().split('T')[0]
+    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+
+    const { data: todayOrders } = await supabase
+      .from('orders')
+      .select('id')
+      .gte('created_at', today)
+
+    const { data: pending } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('status', 'pending_payment')
+
+    const { data: shipped } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('status', 'shipped')
+
+    const { data: completed } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('status', 'completed')
+
+    const { data: revenue } = await supabase
+      .from('payments')
+      .select('amount')
+      .gte('paid_at', firstOfMonth)
+
+    const { data: customers } = await supabase
+      .from('customers')
+      .select('id')
+
+    const totalRevenue = revenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+
+    setStats({
+      todayOrders: todayOrders?.length || 0,
+      pendingPayment: pending?.length || 0,
+      shipped: shipped?.length || 0,
+      monthlyRevenue: totalRevenue,
+      totalCustomers: customers?.length || 0,
+      completed: completed?.length || 0
+    })
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gray-50" dir="rtl">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold text-gray-800">👗 Fashion CRM</h1>
+          <p className="text-gray-500 text-sm">ברוך הבא, עידן</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <ShoppingBag className="text-blue-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">הזמנות היום</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">{stats.todayOrders}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-yellow-100 p-2 rounded-lg">
+                <Clock className="text-yellow-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">ממתין לתשלום</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">{stats.pendingPayment}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-purple-100 p-2 rounded-lg">
+                <Package className="text-purple-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">נשלחו</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">{stats.shipped}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-green-100 p-2 rounded-lg">
+                <TrendingUp className="text-green-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">הכנסות החודש</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">₪{stats.monthlyRevenue}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-pink-100 p-2 rounded-lg">
+                <Users className="text-pink-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">סה"כ לקוחות</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">{stats.totalCustomers}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-emerald-100 p-2 rounded-lg">
+                <CreditCard className="text-emerald-600" size={20} />
+              </div>
+              <span className="text-gray-600 text-sm">הושלמו</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-800">{stats.completed}</p>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <h2 className="text-lg font-bold text-gray-700 mb-4">פעולות מהירות</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <a href="/customers" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-blue-50 transition cursor-pointer">
+            <Users className="mx-auto mb-2 text-blue-600" size={28} />
+            <p className="font-medium text-gray-700">לקוחות</p>
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
+          <a href="/orders" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-purple-50 transition cursor-pointer">
+            <ShoppingBag className="mx-auto mb-2 text-purple-600" size={28} />
+            <p className="font-medium text-gray-700">הזמנות</p>
+          </a>
+          <a href="/payments" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-green-50 transition cursor-pointer">
+            <CreditCard className="mx-auto mb-2 text-green-600" size={28} />
+            <p className="font-medium text-gray-700">תשלומים</p>
+          </a>
+          <a href="/shipments" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition cursor-pointer">
+            <Package className="mx-auto mb-2 text-orange-600" size={28} />
+            <p className="font-medium text-gray-700">משלוחים</p>
           </a>
         </div>
-      </main>
+      </div>
     </div>
-  );
+  )
 }
