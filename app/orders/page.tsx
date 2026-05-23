@@ -16,6 +16,8 @@ type Order = {
   cost_price: number
   status: string
   created_at: string
+  order_date: string
+  payment_method: string
   customers?: { name: string; phone: string }
 }
 
@@ -58,7 +60,9 @@ export default function Orders() {
     quantity: 1,
     price: '',
     cost_price: '',
-    status: 'new'
+    status: 'new',
+    payment_method: '',
+    order_date: ''
   })
 
   useEffect(() => {
@@ -71,6 +75,7 @@ export default function Orders() {
       .from('orders')
       .select('*, customers(name, phone)')
       .order('created_at', { ascending: false })
+      .limit(5000)
     setOrders(data || [])
     setLoading(false)
   }
@@ -87,10 +92,12 @@ export default function Orders() {
       ...form,
       price: parseFloat(form.price) || 0,
       cost_price: parseFloat(form.cost_price) || 0,
-      quantity: parseInt(String(form.quantity)) || 1
+      quantity: parseInt(String(form.quantity)) || 1,
+      order_date: form.order_date || null,
+      payment_method: form.payment_method || null
     }])
     if (!error) {
-      setForm({ customer_id: '', product: '', category: 'shoes', size: '', color: '', quantity: 1, price: '', cost_price: '', status: 'new' })
+      setForm({ customer_id: '', product: '', category: 'shoes', size: '', color: '', quantity: 1, price: '', cost_price: '', status: 'new', payment_method: '', order_date: '' })
       setShowForm(false)
       fetchOrders()
     }
@@ -118,9 +125,6 @@ export default function Orders() {
 
   const getStatus = (val: string) => statusOptions.find(s => s.value === val) || statusOptions[0]
 
-  // רווח = מחיר מכירה - עלות
-  // מע"מ = רווח × 18%
-  // רווח נטו = רווח × 82%
   const calcVat = (price: number, cost: number) => ((price - cost) * 0.18).toFixed(2)
   const calcProfit = (price: number, cost: number) => ((price - cost) * 0.82).toFixed(2)
 
@@ -155,11 +159,9 @@ export default function Orders() {
                   <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>
                 ))}
               </select>
-
               <input placeholder="מוצר *" value={form.product}
                 onChange={e => setForm({...form, product: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm col-span-2" />
-
               <select value={form.category}
                 onChange={e => setForm({...form, category: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm">
@@ -167,27 +169,27 @@ export default function Orders() {
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
-
               <input placeholder="מידה" value={form.size}
                 onChange={e => setForm({...form, size: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
               <input placeholder="צבע" value={form.color}
                 onChange={e => setForm({...form, color: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
               <input placeholder="כמות" type="number" value={form.quantity}
                 onChange={e => setForm({...form, quantity: parseInt(e.target.value)})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
-              <input placeholder="מחיר מכירה ללקוח ₪" type="number" value={form.price}
+              <input placeholder="מחיר מכירה ₪" type="number" value={form.price}
                 onChange={e => setForm({...form, price: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
-              <input placeholder="מחיר עלות שלנו ₪" type="number" value={form.cost_price}
+              <input placeholder="מחיר עלות ₪" type="number" value={form.cost_price}
                 onChange={e => setForm({...form, cost_price: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm" />
-
+              <input placeholder="תאריך הזמנה" type="date" value={form.order_date}
+                onChange={e => setForm({...form, order_date: e.target.value})}
+                className="border rounded-lg px-3 py-2 text-sm" />
+              <input placeholder="אמצעי תשלום" value={form.payment_method}
+                onChange={e => setForm({...form, payment_method: e.target.value})}
+                className="border rounded-lg px-3 py-2 text-sm" />
               <select value={form.status}
                 onChange={e => setForm({...form, status: e.target.value})}
                 className="border rounded-lg px-3 py-2 text-sm col-span-2">
@@ -196,7 +198,6 @@ export default function Orders() {
                 ))}
               </select>
             </div>
-
             <div className="flex gap-3 mt-4">
               <button onClick={addOrder}
                 className="bg-purple-600 text-white px-6 py-2 rounded-lg text-sm font-medium">
@@ -247,6 +248,8 @@ export default function Orders() {
                         <p className="font-bold text-gray-800">#{o.order_number} — {o.customers?.name}</p>
                         <p className="text-sm text-gray-600">{o.product} {o.size && `| מידה ${o.size}`} {o.color && `| ${o.color}`}</p>
                         <p className="text-sm text-gray-500">{o.customers?.phone}</p>
+                        {o.order_date && <p className="text-xs text-gray-400">📅 {new Date(o.order_date).toLocaleDateString('he-IL')}</p>}
+                        {o.payment_method && <p className="text-xs text-gray-400">💳 {o.payment_method}</p>}
                       </div>
                     </div>
                     <div className="text-left">

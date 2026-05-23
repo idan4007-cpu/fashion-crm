@@ -10,7 +10,7 @@ export default function Dashboard() {
     shipped: 0,
     monthlyRevenue: 0,
     totalCustomers: 0,
-    completed: 0
+    totalOrders: 0
   })
 
   useEffect(() => {
@@ -36,19 +36,18 @@ export default function Dashboard() {
       .select('id')
       .eq('status', 'shipped')
 
-    const { data: completed } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('status', 'completed')
-
     const { data: revenue } = await supabase
       .from('payments')
       .select('amount')
       .gte('paid_at', firstOfMonth)
 
-    const { data: customers } = await supabase
+    const { count: totalOrders } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+
+    const { count: totalCustomers } = await supabase
       .from('customers')
-      .select('id')
+      .select('id', { count: 'exact', head: true })
 
     const totalRevenue = revenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
@@ -57,14 +56,13 @@ export default function Dashboard() {
       pendingPayment: pending?.length || 0,
       shipped: shipped?.length || 0,
       monthlyRevenue: totalRevenue,
-      totalCustomers: customers?.length || 0,
-      completed: completed?.length || 0
+      totalCustomers: totalCustomers || 0,
+      totalOrders: totalOrders || 0
     })
   }
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-gray-800">👗 Fashion CRM</h1>
@@ -73,7 +71,6 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
@@ -130,13 +127,12 @@ export default function Dashboard() {
               <div className="bg-emerald-100 p-2 rounded-lg">
                 <CreditCard className="text-emerald-600" size={20} />
               </div>
-              <span className="text-gray-600 text-sm">הושלמו</span>
+              <span className="text-gray-600 text-sm">סה"כ הזמנות</span>
             </div>
-            <p className="text-3xl font-bold text-gray-800">{stats.completed}</p>
+            <p className="text-3xl font-bold text-gray-800">{stats.totalOrders}</p>
           </div>
         </div>
 
-        {/* Quick Actions */}
         <h2 className="text-lg font-bold text-gray-700 mb-4">פעולות מהירות</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <a href="/customers" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-blue-50 transition cursor-pointer">
@@ -151,9 +147,9 @@ export default function Dashboard() {
             <CreditCard className="mx-auto mb-2 text-green-600" size={28} />
             <p className="font-medium text-gray-700">תשלומים</p>
           </a>
-          <a href="/shipments" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition cursor-pointer">
+          <a href="/import" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition cursor-pointer">
             <Package className="mx-auto mb-2 text-orange-600" size={28} />
-            <p className="font-medium text-gray-700">משלוחים</p>
+            <p className="font-medium text-gray-700">ייבוא</p>
           </a>
         </div>
       </div>
