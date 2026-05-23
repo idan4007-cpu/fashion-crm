@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Package, Plus, Truck } from 'lucide-react'
+import { Plus, Truck } from 'lucide-react'
 
 type Shipment = {
   id: string
@@ -54,7 +54,7 @@ export default function Shipments() {
       .from('shipments')
       .select('*, orders(order_number, product, customers(name, phone))')
       .order('updated_at', { ascending: false })
-    setShipments(data || [])
+    setShipments((data as unknown as Shipment[]) || [])
     setLoading(false)
   }
 
@@ -63,7 +63,7 @@ export default function Shipments() {
       .from('orders')
       .select('id, order_number, product, customers(name, phone)')
       .eq('status', 'paid')
-    setOrders((data || []) as Order[])
+    setOrders((data as unknown as Order[]) || [])
   }
 
   async function addShipment() {
