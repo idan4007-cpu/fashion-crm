@@ -1,79 +1,269 @@
-import { NextRequest, NextResponse } from 'next/server'
+'use client'
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import * as XLSX from 'xlsx'
 
-function splitToChunks(text: string, chunkSize: number = 3000): string[] {
-  const lines = text.split('\n')
-  const chunks: string[] = []
-  let current = ''
-
-  for (const line of lines) {
-    if ((current + line).length > chunkSize) {
-      if (current) chunks.push(current)
-      current = line + '\n'
-    } else {
-      current += line + '\n'
-    }
-  }
-  if (current) chunks.push(current)
-  return chunks
+type ParsedOrder = {
+  date: string
+  order_number: string
+  product: string
+  size: string
+  name: string
+  address: string
+  phone: string
+  tracking: string
+  payment: string
+  status: string
+  price: number
+  cost: number
+  approved: boolean
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const { text } = await req.json()
-    const chunks = splitToChunks(text)
-    const allOrders: object[] = []
+export default function ImportPage() {
+  const [parsed, setParsed] = useState<ParsedOrder[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [text, setText] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [tab, setTab] = useState<'excel' | 'whatsapp'>('excel')
 
-    for (const chunk of chunks) {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY!,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-opus-4-5',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: `אתה מנתח טקסט מקבוצת וואטסאפ של עסק אופנה.
-חלץ את כל ההזמנות מהטקסט הבא והחזר JSON בלבד, ללא טקסט נוסף, ללא backticks.
-אם אין הזמנות בטקסט, החזר מערך ריק: []
+  function handleExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-הפורמט:
-[{"order_number":"11558","name":"שם מלא","phone":"טלפון","address":"כתובת","city":"עיר","zip":"מיקוד","size":"מידה","color":"צבע"}]
-
-חשוב:
-- אם לקוח הזמין כמה פריטים — שורה נפרדת לכל הזמנה
-- התעלם מ"התמונה הושמטה" ו"הודעה זו נמחקה"
-- החזר JSON בלבד
-
-הטקסט:
-${chunk}`
-          }]
-        })
-      })
-
-      const data = await response.json()
-      const content = data.content?.[0]?.text || '[]'
-      const clean = content.replace(/```json|```/g, '').trim()
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const data = evt.target?.result
+      const wb = XLSX.read(data, { type: 'binary', cellDates: true })
       
-      try {
-        const orders = JSON.parse(clean)
-        if (Array.isArray(orders)) allOrders.push(...orders)
-      } catch {
-        console.log('Chunk parse error, skipping')
+      const allOrders: ParsedOrder[] = []
+      
+      const monthSheets = wb.SheetNames.filter(name => 
+        name.includes('26') || name.includes('25') || name.includes('24')
+      )
+
+      for (const sheetName of monthSheets) {
+        const ws = wb.Sheets[sheetName]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][]
+        
+        // דלג על שורה 1 (כותרות) ושורה 2 (ריקה)
+        for (let i = 2; i < rows.length; i++) {
+          const row = rows[i]
+          if (!row[1] || !row[4]) continue // דלג אם אין מספר הזמנה או שם
+          
+          allOrders.push({
+            date: row[0] ? new Date(row[0]).toLocaleDateString('he-IL') : '',
+            order_number: String(row[1] || ''),
+            product: String(row[2] || ''),
+            size: String(row[3] || ''),
+            name: String(row[4] || ''),
+            address: String(row[5] || ''),
+            phone: String(row[6] || ''),
+            tracking: String(row[7] || ''),
+            payment: String(row[8] || ''),
+            status: String(row[15] || ''),
+            price: parseFloat(row[10]) || 0,
+            cost: parseFloat(row[11]) || 0,
+            approved: true
+          })
+        }
+      }
+
+      setParsed(allOrders)
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  async function handleAnalyze() {
+    if (!text.trim()) return
+    setAnalyzing(true)
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      })
+      const data = await response.json()
+      setParsed(data.orders.map((o: any) => ({ ...o, approved: true, price: 0, cost: 0, date: '', tracking: '', payment: '', status: '' })))
+    } catch {
+      alert('שגיאה בניתוח. נסה שוב.')
+    }
+    setAnalyzing(false)
+  }
+
+  async function handleSave() {
+    setLoading(true)
+    const approved = parsed.filter(o => o.approved)
+
+    for (const order of approved) {
+      let customerId = ''
+
+      const phone = order.phone?.toString().replace(/\D/g, '') || ''
+      
+      if (phone) {
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', phone)
+          .single()
+
+        if (existing) {
+          customerId = existing.id
+        } else {
+          const { data: newCustomer } = await supabase
+            .from('customers')
+            .insert([{
+              name: order.name,
+              phone: phone,
+              city: order.address,
+              type: 'new'
+            }])
+            .select()
+            .single()
+          if (newCustomer) customerId = newCustomer.id
+        }
+      }
+
+      if (customerId) {
+        await supabase.from('orders').insert([{
+          customer_id: customerId,
+          product: order.product || 'לא צוין',
+          size: order.size || '',
+          status: order.status === 'שולם' ? 'paid' : 'new',
+          price: order.price || 0,
+          cost_price: order.cost || 0,
+          quantity: 1
+        }])
       }
     }
 
-    // הסר כפילויות לפי מספר הזמנה
-    const unique = allOrders.filter((order: any, index, self) =>
-      index === self.findIndex((o: any) => o.order_number === order.order_number)
-    )
-
-    return NextResponse.json({ orders: unique })
-  } catch (err) {
-    console.error('Error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    setLoading(false)
+    setSaved(true)
   }
+
+  return (
+    <div className="min-h-screen bg-gray-50" dir="rtl">
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">📥 ייבוא הזמנות</h1>
+            <p className="text-gray-500 text-sm">ייבוא מ-Excel או מוואטסאפ</p>
+          </div>
+          <a href="/" className="text-sm text-gray-500 px-3 py-2">🏠 דשבורד</a>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* טאבים */}
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => setTab('excel')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'excel' ? 'bg-green-600 text-white' : 'bg-white border text-gray-600'}`}>
+            📊 ייבוא מ-Excel
+          </button>
+          <button onClick={() => setTab('whatsapp')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'whatsapp' ? 'bg-blue-600 text-white' : 'bg-white border text-gray-600'}`}>
+            📱 ייבוא מוואטסאפ
+          </button>
+        </div>
+
+        {!parsed.length ? (
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            {tab === 'excel' ? (
+              <>
+                <h2 className="text-lg font-bold mb-2">העלה קובץ Excel</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  העלה את קובץ ההזמנות שלך — המערכת תקרא את כל הכרטיסיות אוטומטית
+                </p>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcel}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold mb-2">הדבק טקסט מהקבוצה</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  בוואטסאפ: לחץ על שם הקבוצה ← ייצוא צ'אט ← ללא מדיה
+                </p>
+                <textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="הדבק כאן את הטקסט..."
+                  className="w-full border rounded-lg p-3 text-sm h-48 font-mono"
+                  dir="ltr"
+                />
+                <button onClick={handleAnalyze} disabled={!text.trim() || analyzing}
+                  className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                  {analyzing ? '🤖 מנתח...' : '🤖 נתח עם AI'}
+                </button>
+              </>
+            )}
+          </div>
+        ) : saved ? (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+            <p className="text-4xl mb-4">🎉</p>
+            <h2 className="text-xl font-bold text-green-800 mb-2">נשמר בהצלחה!</h2>
+            <p className="text-green-600 mb-6">{parsed.filter(o => o.approved).length} הזמנות יובאו למערכת</p>
+            <div className="flex gap-3 justify-center">
+              <a href="/orders" className="bg-purple-600 text-white px-6 py-2 rounded-lg text-sm">צפה בהזמנות</a>
+              <button onClick={() => { setParsed([]); setText(''); setSaved(false) }}
+                className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg text-sm">
+                ייבוא נוסף
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">נמצאו {parsed.length} הזמנות</h2>
+              <button onClick={() => setParsed([])} className="text-sm text-gray-500">← חזור</button>
+            </div>
+
+            <div className="bg-white rounded-xl border overflow-hidden mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-right">✓</th>
+                      <th className="px-3 py-2 text-right">מס'</th>
+                      <th className="px-3 py-2 text-right">שם</th>
+                      <th className="px-3 py-2 text-right">מוצר</th>
+                      <th className="px-3 py-2 text-right">מידה</th>
+                      <th className="px-3 py-2 text-right">מחיר</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsed.map((o, i) => (
+                      <tr key={i} className={`border-t ${!o.approved ? 'opacity-40' : ''}`}>
+                        <td className="px-3 py-2">
+                          <input type="checkbox" checked={o.approved}
+                            onChange={e => {
+                              const updated = [...parsed]
+                              updated[i].approved = e.target.checked
+                              setParsed(updated)
+                            }} />
+                        </td>
+                        <td className="px-3 py-2">#{o.order_number}</td>
+                        <td className="px-3 py-2">{o.name}</td>
+                        <td className="px-3 py-2">{o.product}</td>
+                        <td className="px-3 py-2">{o.size}</td>
+                        <td className="px-3 py-2">₪{o.price}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <button onClick={handleSave} disabled={loading}
+              className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-bold disabled:opacity-50">
+              {loading ? 'שומר...' : `✅ שמור ${parsed.filter(o => o.approved).length} הזמנות למערכת`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
