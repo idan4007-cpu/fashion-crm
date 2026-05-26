@@ -1,13 +1,15 @@
 'use client'
 import { useState } from 'react'
 
+const CORRECT_PASSWORD = 'Daniel859'
+
 export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [show, setShow] = useState(false)
 
   function handleLogin() {
-    if (password === process.env.NEXT_PUBLIC_APP_PASSWORD) {
+    if (password === CORRECT_PASSWORD) {
       localStorage.setItem('crm_auth', 'true')
       window.location.href = '/'
     } else {
