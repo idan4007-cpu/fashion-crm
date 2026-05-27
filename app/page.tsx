@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard } from 'lucide-react'
+import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard, BarChart2 } from 'lucide-react'
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -150,6 +150,14 @@ export default function Dashboard() {
           <a href="/import" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition cursor-pointer">
             <Package className="mx-auto mb-2 text-orange-600" size={28} />
             <p className="font-medium text-gray-700">ייבוא</p>
+          </a>
+          <a href="/analytics" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-indigo-50 transition cursor-pointer">
+            <BarChart2 className="mx-auto mb-2 text-indigo-600" size={28} />
+            <p className="font-medium text-gray-700">אנליטיקה</p>
+          </a>
+          <a href="/shipments" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition cursor-pointer">
+            <Package className="mx-auto mb-2 text-orange-500" size={28} />
+            <p className="font-medium text-gray-700">משלוחים</p>
           </a>
         </div>
       </div>

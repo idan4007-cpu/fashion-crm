@@ -22,6 +22,7 @@ export default function ImportPage() {
   const [parsed, setParsed] = useState<ParsedOrder[]>([])
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveStats, setSaveStats] = useState({ added: 0, skipped: 0 })
   const [tab, setTab] = useState<'excel' | 'whatsapp'>('excel')
   const [text, setText] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
@@ -56,7 +57,6 @@ export default function ImportPage() {
           const row = rows[i]
           if (!row[1] || !row[4]) continue
 
-          // המרת תאריך
           let orderDate = ''
           if (row[0]) {
             try {
@@ -108,17 +108,34 @@ export default function ImportPage() {
   async function handleSave() {
     setLoading(true)
     const approved = parsed.filter(o => o.approved)
+    let added = 0
+    let skipped = 0
+
     for (const order of approved) {
+      // בדוק אם מספר הזמנה כבר קיים
+      if (order.order_number) {
+        const { data: existing } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('order_number', order.order_number)
+          .single()
+        
+        if (existing) {
+          skipped++
+          continue // דלג — הזמנה כבר קיימת
+        }
+      }
+
       let customerId = ''
       const phone = order.phone?.toString().replace(/\D/g, '') || ''
       if (phone) {
-        const { data: existing } = await supabase
+        const { data: existingCustomer } = await supabase
           .from('customers')
           .select('id')
           .eq('phone', phone)
           .single()
-        if (existing) {
-          customerId = existing.id
+        if (existingCustomer) {
+          customerId = existingCustomer.id
         } else {
           const { data: newCustomer } = await supabase
             .from('customers')
@@ -128,8 +145,9 @@ export default function ImportPage() {
           if (newCustomer) customerId = newCustomer.id
         }
       }
+
       if (customerId) {
-        await supabase.from('orders').insert([{
+        const { error } = await supabase.from('orders').insert([{
           customer_id: customerId,
           product: order.product || 'לא צוין',
           size: order.size || '',
@@ -140,8 +158,11 @@ export default function ImportPage() {
           order_date: order.order_date || null,
           payment_method: order.payment || null
         }])
+        if (!error) added++
       }
     }
+
+    setSaveStats({ added, skipped })
     setLoading(false)
     setSaved(true)
   }
@@ -176,7 +197,7 @@ export default function ImportPage() {
               <>
                 <h2 className="text-lg font-bold mb-2">העלה קובץ Excel</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  המערכת תקרא את כל הכרטיסיות אוטומטית
+                  המערכת תקרא את כל הכרטיסיות ותדלג על הזמנות כפולות אוטומטית ✅
                 </p>
                 <input
                   type="file"
@@ -205,8 +226,17 @@ export default function ImportPage() {
         ) : saved ? (
           <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
             <p className="text-4xl mb-4">🎉</p>
-            <h2 className="text-xl font-bold text-green-800 mb-2">נשמר בהצלחה!</h2>
-            <p className="text-green-600 mb-6">{parsed.filter(o => o.approved).length} הזמנות יובאו</p>
+            <h2 className="text-xl font-bold text-green-800 mb-2">הייבוא הושלם!</h2>
+            <div className="flex justify-center gap-6 mb-6">
+              <div>
+                <p className="text-3xl font-bold text-green-600">{saveStats.added}</p>
+                <p className="text-sm text-gray-500">הזמנות חדשות</p>
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-gray-400">{saveStats.skipped}</p>
+                <p className="text-sm text-gray-500">דולגו (כפולות)</p>
+              </div>
+            </div>
             <div className="flex gap-3 justify-center">
               <a href="/orders" className="bg-purple-600 text-white px-6 py-2 rounded-lg text-sm">צפה בהזמנות</a>
               <button onClick={() => { setParsed([]); setText(''); setSaved(false) }}
