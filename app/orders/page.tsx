@@ -44,11 +44,15 @@ const categoryOptions = [
   { value: 'clothing', label: 'ביגוד' },
 ]
 
+const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
+
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterYear, setFilterYear] = useState('')
+  const [filterMonth, setFilterMonth] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
@@ -114,19 +118,34 @@ export default function Orders() {
     fetchOrders()
   }
 
+  const availableYears = [...new Set(orders
+    .filter(o => o.order_date)
+    .map(o => new Date(o.order_date).getFullYear().toString())
+  )].sort((a, b) => Number(b) - Number(a))
+
   const filtered = orders.filter(o => {
     const matchSearch =
       o.customers?.name?.includes(search) ||
       o.product?.includes(search) ||
       String(o.order_number)?.includes(search)
     const matchStatus = filterStatus ? o.status === filterStatus : true
-    return matchSearch && matchStatus
+    const matchYear = filterYear
+      ? o.order_date && new Date(o.order_date).getFullYear().toString() === filterYear
+      : true
+    const matchMonth = filterMonth
+      ? o.order_date && new Date(o.order_date).getMonth().toString() === filterMonth
+      : true
+    return matchSearch && matchStatus && matchYear && matchMonth
   })
 
-  const getStatus = (val: string) => statusOptions.find(s => s.value === val) || statusOptions[0]
+  const totalRevenue = filtered.reduce((s, o) => s + (o.price || 0), 0)
+  const totalProfit = filtered.reduce((s, o) => s + ((o.price - o.cost_price) * 0.82 || 0), 0)
+  const totalVat = filtered.reduce((s, o) => s + ((o.price - o.cost_price) * 0.18 || 0), 0)
 
+  const getStatus = (val: string) => statusOptions.find(s => s.value === val) || statusOptions[0]
   const calcVat = (price: number, cost: number) => ((price - cost) * 0.18).toFixed(2)
   const calcProfit = (price: number, cost: number) => ((price - cost) * 0.82).toFixed(2)
+  const fmt = (n: number) => `₪${Math.round(n).toLocaleString()}`
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -134,7 +153,7 @@ export default function Orders() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-800">🛍️ הזמנות</h1>
-            <p className="text-gray-500 text-sm">{orders.length} הזמנות במערכת</p>
+            <p className="text-gray-500 text-sm">{filtered.length} מתוך {orders.length} הזמנות</p>
           </div>
           <div className="flex gap-2">
             <a href="/" className="text-sm text-gray-500 px-3 py-2">🏠 דשבורד</a>
@@ -211,14 +230,35 @@ export default function Orders() {
           </div>
         )}
 
-        <div className="flex gap-3 mb-4">
-          <div className="relative flex-1">
+        {/* פילטרים */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="relative col-span-2">
             <Search className="absolute right-3 top-2.5 text-gray-400" size={18} />
             <input placeholder="חיפוש לפי שם, מוצר או מספר הזמנה..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full border rounded-lg pr-10 pl-4 py-2 text-sm bg-white" />
           </div>
+
+          <select value={filterYear}
+            onChange={e => { setFilterYear(e.target.value); setFilterMonth('') }}
+            className="border rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">כל השנים</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+
+          <select value={filterMonth}
+            onChange={e => setFilterMonth(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm bg-white"
+            disabled={!filterYear}>
+            <option value="">כל החודשים</option>
+            {monthNames.map((m, i) => (
+              <option key={i} value={String(i)}>{m}</option>
+            ))}
+          </select>
+
           <select value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-white">
@@ -227,12 +267,47 @@ export default function Orders() {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+
+          {(filterYear || filterMonth || filterStatus || search) && (
+            <button
+              onClick={() => { setFilterYear(''); setFilterMonth(''); setFilterStatus(''); setSearch('') }}
+              className="border rounded-lg px-3 py-2 text-sm bg-white text-red-500">
+              ✕ נקה פילטרים
+            </button>
+          )}
         </div>
+
+        {/* סיכום תקופה */}
+        {(filterYear || filterMonth) && (
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
+            <h3 className="font-bold text-purple-800 mb-3">
+              סיכום — {filterMonth !== '' ? monthNames[Number(filterMonth)] + ' ' : ''}{filterYear}
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">הזמנות</p>
+                <p className="text-xl font-bold text-gray-800">{filtered.length}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">הכנסות</p>
+                <p className="text-xl font-bold text-gray-800">{fmt(totalRevenue)}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">רווח נטו</p>
+                <p className="text-xl font-bold text-green-600">{fmt(totalProfit)}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">מע"מ</p>
+                <p className="text-xl font-bold text-orange-500">{fmt(totalVat)}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-center text-gray-500 py-8">טוען...</p>
         ) : filtered.length === 0 ? (
-          <p className="text-center text-gray-500 py-8">אין הזמנות עדיין</p>
+          <p className="text-center text-gray-500 py-8">אין הזמנות</p>
         ) : (
           <div className="space-y-3">
             {filtered.map(o => {
@@ -258,7 +333,7 @@ export default function Orders() {
                         <div className="text-xs mt-1 space-y-0.5">
                           <p className="text-gray-400">עלות: ₪{o.cost_price}</p>
                           <p className="text-orange-500">מע"מ: ₪{calcVat(o.price, o.cost_price)}</p>
-                          <p className="text-green-600 font-medium">רווח נטו: ₪{calcProfit(o.price, o.cost_price)}</p>
+                          <p className="text-green-600 font-medium">רווח: ₪{calcProfit(o.price, o.cost_price)}</p>
                         </div>
                       )}
                     </div>
