@@ -22,7 +22,6 @@ function parseDate(raw: any): string {
   if (!raw) return ''
   try {
     const str = String(raw).trim()
-    // פורמט DD.MM.YY או DD.MM.YYYY
     const dotMatch = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/)
     if (dotMatch) {
       let year = parseInt(dotMatch[3])
@@ -32,7 +31,6 @@ function parseDate(raw: any): string {
       const d = new Date(year, month, day)
       if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
     }
-    // תאריך רגיל
     const d = new Date(raw)
     if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
   } catch { }
@@ -79,7 +77,7 @@ export default function ImportPage() {
           if (!row[1] || !row[4]) continue
 
           allOrders.push({
-            order_number: String(row[1] || ''),
+            order_number: String(row[1] || '').trim(),
             product: String(row[2] || ''),
             size: String(row[3] || ''),
             name: String(row[4] || ''),
@@ -123,6 +121,7 @@ export default function ImportPage() {
     let skipped = 0
 
     for (const order of approved) {
+      // בדוק אם מספר הזמנה כבר קיים
       if (order.order_number) {
         const { data: existing } = await supabase
           .from('orders')
@@ -149,8 +148,10 @@ export default function ImportPage() {
       }
 
       if (customerId) {
+        const orderNum = parseInt(order.order_number)
         const { error } = await supabase.from('orders').insert([{
           customer_id: customerId,
+          order_number: !isNaN(orderNum) ? orderNum : undefined,
           product: order.product || 'לא צוין',
           size: order.size || '',
           status: 'new',
@@ -199,7 +200,7 @@ export default function ImportPage() {
               <>
                 <h2 className="text-lg font-bold mb-2">העלה קובץ Excel</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  המערכת תקרא את כל הכרטיסיות ותדלג על הזמנות כפולות אוטומטית ✅
+                  המערכת תשמור את מספרי ההזמנה המקוריים ✅
                 </p>
                 <input type="file" accept=".xlsx,.xls" onChange={handleExcel}
                   className="block w-full text-sm text-gray-500 file:ml-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700" />
