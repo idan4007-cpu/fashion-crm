@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard, BarChart2 } from 'lucide-react'
+import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard, BarChart2, Bell } from 'lucide-react'
 
 type PaymentStat = {
   method: string
@@ -55,7 +55,6 @@ export default function Dashboard() {
   }
 
   async function fetchCharts() {
-    // פילוח תשלומים
     const { data: orders } = await supabase
       .from('orders')
       .select('payment_method, price')
@@ -72,7 +71,6 @@ export default function Dashboard() {
       setPayments(Object.entries(map).map(([method, d]) => ({ method, ...d })).sort((a, b) => b.count - a.count))
     }
 
-    // הכנסות 12 חודשים אחרונים
     const { data: monthly } = await supabase
       .from('orders')
       .select('order_date, price')
@@ -104,7 +102,6 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* סטטיסטיקות */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
@@ -150,10 +147,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* גרפים */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          
-          {/* גרף עוגה - אמצעי תשלום */}
           <div className="bg-white rounded-xl shadow-sm border p-5">
             <h2 className="text-lg font-bold mb-4">💳 פילוח אמצעי תשלום</h2>
             {payments.length > 0 ? (
@@ -167,15 +161,10 @@ export default function Dashboard() {
                           const pct = (p.count / totalPayments) * 100
                           const dash = `${pct} ${100 - pct}`
                           const el = (
-                            <circle
-                              key={p.method}
-                              cx="50" cy="50" r="15.9"
-                              fill="none"
-                              stroke={COLORS[i % COLORS.length]}
-                              strokeWidth="31.8"
-                              strokeDasharray={dash}
-                              strokeDashoffset={-offset}
-                            />
+                            <circle key={p.method} cx="50" cy="50" r="15.9"
+                              fill="none" stroke={COLORS[i % COLORS.length]}
+                              strokeWidth="31.8" strokeDasharray={dash}
+                              strokeDashoffset={-offset} />
                           )
                           offset += pct
                           return el
@@ -202,18 +191,15 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* גרף עמודות - הכנסות חודשיות */}
           <div className="bg-white rounded-xl shadow-sm border p-5">
             <h2 className="text-lg font-bold mb-4">📈 הכנסות 12 חודשים אחרונים</h2>
             {monthlyStats.length > 0 ? (
               <div className="flex items-end gap-1 h-40">
                 {monthlyStats.map((m, i) => (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full bg-purple-500 rounded-t-sm"
+                    <div className="w-full bg-purple-500 rounded-t-sm"
                       style={{ height: `${(m.revenue / maxRevenue) * 100}%`, minHeight: '4px' }}
-                      title={`₪${Math.round(m.revenue).toLocaleString()}`}
-                    />
+                      title={`₪${Math.round(m.revenue).toLocaleString()}`} />
                     <span className="text-xs text-gray-400 rotate-45 origin-left" style={{ fontSize: '9px' }}>{m.month}</span>
                   </div>
                 ))}
@@ -224,7 +210,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* פעולות מהירות */}
         <h2 className="text-lg font-bold text-gray-700 mb-4">פעולות מהירות</h2>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
           <a href="/customers" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-blue-50 transition">
@@ -246,6 +231,10 @@ export default function Dashboard() {
           <a href="/analytics" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-indigo-50 transition">
             <BarChart2 className="mx-auto mb-2 text-indigo-600" size={24} />
             <p className="font-medium text-gray-700 text-sm">אנליטיקה</p>
+          </a>
+          <a href="/dormant" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-red-50 transition">
+            <Bell className="mx-auto mb-2 text-red-500" size={24} />
+            <p className="font-medium text-gray-700 text-sm">רדומים</p>
           </a>
           <a href="/import" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-orange-50 transition">
             <Package className="mx-auto mb-2 text-orange-600" size={24} />
