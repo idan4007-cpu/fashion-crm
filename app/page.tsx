@@ -23,7 +23,9 @@ export default function Dashboard() {
     shipped: 0,
     monthlyRevenue: 0,
     totalCustomers: 0,
-    totalOrders: 0
+    totalOrders: 0,
+    dormantYear: 0,
+    dormant6to12: 0
   })
   const [payments, setPayments] = useState<PaymentStat[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthStat[]>([])
@@ -31,6 +33,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetchStats()
     fetchCharts()
+    fetchDormant()
   }, [])
 
   async function fetchStats() {
@@ -44,14 +47,52 @@ export default function Dashboard() {
     const { count: totalOrders } = await supabase.from('orders').select('id', { count: 'exact', head: true })
     const { count: totalCustomers } = await supabase.from('customers').select('id', { count: 'exact', head: true })
 
-    setStats({
+    setStats(prev => ({
+      ...prev,
       todayOrders: todayOrders?.length || 0,
       pendingPayment: pending?.length || 0,
       shipped: shipped?.length || 0,
       monthlyRevenue: revenue?.reduce((s, p) => s + (p.amount || 0), 0) || 0,
       totalCustomers: totalCustomers || 0,
       totalOrders: totalOrders || 0
-    })
+    }))
+  }
+
+  async function fetchDormant() {
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('customer_id, order_date')
+      .not('order_date', 'is', null)
+      .limit(10000)
+
+    const { data: customers } = await supabase
+      .from('customers')
+      .select('id')
+      .limit(5000)
+
+    if (!orders || !customers) return
+
+    const today = new Date()
+    let dormantYear = 0
+    let dormant6to12 = 0
+
+    for (const c of customers) {
+      const customerOrders = orders.filter(o => o.customer_id === c.id)
+      if (customerOrders.length === 0) continue
+
+      const dates = customerOrders
+        .map(o => new Date(o.order_date))
+        .filter(d => !isNaN(d.getTime()))
+        .sort((a, b) => b.getTime() - a.getTime())
+
+      if (dates.length === 0) continue
+
+      const daysDiff = Math.floor((today.getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24))
+      if (daysDiff > 365) dormantYear++
+      else if (daysDiff > 180) dormant6to12++
+    }
+
+    setStats(prev => ({ ...prev, dormantYear, dormant6to12 }))
   }
 
   async function fetchCharts() {
@@ -102,7 +143,7 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-blue-100 p-2 rounded-lg"><ShoppingBag className="text-blue-600" size={20} /></div>
@@ -116,20 +157,6 @@ export default function Dashboard() {
               <span className="text-gray-600 text-sm">ממתין לתשלום</span>
             </div>
             <p className="text-3xl font-bold text-gray-800">{stats.pendingPayment}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-purple-100 p-2 rounded-lg"><Package className="text-purple-600" size={20} /></div>
-              <span className="text-gray-600 text-sm">נשלחו</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-800">{stats.shipped}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="bg-green-100 p-2 rounded-lg"><TrendingUp className="text-green-600" size={20} /></div>
-              <span className="text-gray-600 text-sm">הכנסות החודש</span>
-            </div>
-            <p className="text-3xl font-bold text-gray-800">₪{stats.monthlyRevenue}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
@@ -147,6 +174,27 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* לקוחות רדומים */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <a href="/dormant" className="bg-red-50 border border-red-200 rounded-xl p-4 hover:bg-red-100 transition">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-red-100 p-2 rounded-lg"><Bell className="text-red-500" size={20} /></div>
+              <span className="text-red-700 text-sm font-medium">רדום מעל שנה</span>
+            </div>
+            <p className="text-3xl font-bold text-red-600">{stats.dormantYear}</p>
+            <p className="text-xs text-red-400 mt-1">לקוחות לעיר ← לחץ לפרטים</p>
+          </a>
+          <a href="/dormant" className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 hover:bg-yellow-100 transition">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-yellow-100 p-2 rounded-lg"><Bell className="text-yellow-500" size={20} /></div>
+              <span className="text-yellow-700 text-sm font-medium">רדום 6-12 חודשים</span>
+            </div>
+            <p className="text-3xl font-bold text-yellow-600">{stats.dormant6to12}</p>
+            <p className="text-xs text-yellow-400 mt-1">כדאי ליצור קשר ← לחץ לפרטים</p>
+          </a>
+        </div>
+
+        {/* גרפים */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border p-5">
             <h2 className="text-lg font-bold mb-4">💳 פילוח אמצעי תשלום</h2>
