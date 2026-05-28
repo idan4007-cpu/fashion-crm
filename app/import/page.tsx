@@ -18,6 +18,27 @@ type ParsedOrder = {
   approved: boolean
 }
 
+function parseDate(raw: any): string {
+  if (!raw) return ''
+  try {
+    const str = String(raw).trim()
+    // פורמט DD.MM.YY או DD.MM.YYYY
+    const dotMatch = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/)
+    if (dotMatch) {
+      let year = parseInt(dotMatch[3])
+      if (year < 100) year += 2000
+      const month = parseInt(dotMatch[2]) - 1
+      const day = parseInt(dotMatch[1])
+      const d = new Date(year, month, day)
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+    }
+    // תאריך רגיל
+    const d = new Date(raw)
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+  } catch { }
+  return ''
+}
+
 export default function ImportPage() {
   const [parsed, setParsed] = useState<ParsedOrder[]>([])
   const [loading, setLoading] = useState(false)
@@ -57,16 +78,6 @@ export default function ImportPage() {
           const row = rows[i]
           if (!row[1] || !row[4]) continue
 
-          let orderDate = ''
-          if (row[0]) {
-            try {
-              const d = new Date(row[0])
-              if (!isNaN(d.getTime())) {
-                orderDate = d.toISOString().split('T')[0]
-              }
-            } catch { }
-          }
-
           allOrders.push({
             order_number: String(row[1] || ''),
             product: String(row[2] || ''),
@@ -78,7 +89,7 @@ export default function ImportPage() {
             payment: String(row[8] || ''),
             price: parseFloat(row[10]) || 0,
             cost: parseFloat(row[11]) || 0,
-            order_date: orderDate,
+            order_date: parseDate(row[0]),
             approved: true
           })
         }
@@ -112,36 +123,27 @@ export default function ImportPage() {
     let skipped = 0
 
     for (const order of approved) {
-      // בדוק אם מספר הזמנה כבר קיים
       if (order.order_number) {
         const { data: existing } = await supabase
           .from('orders')
           .select('id')
           .eq('order_number', order.order_number)
           .single()
-        
-        if (existing) {
-          skipped++
-          continue // דלג — הזמנה כבר קיימת
-        }
+        if (existing) { skipped++; continue }
       }
 
       let customerId = ''
       const phone = order.phone?.toString().replace(/\D/g, '') || ''
       if (phone) {
         const { data: existingCustomer } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('phone', phone)
-          .single()
+          .from('customers').select('id').eq('phone', phone).single()
         if (existingCustomer) {
           customerId = existingCustomer.id
         } else {
           const { data: newCustomer } = await supabase
             .from('customers')
             .insert([{ name: order.name, phone, city: order.address, type: 'new' }])
-            .select()
-            .single()
+            .select().single()
           if (newCustomer) customerId = newCustomer.id
         }
       }
@@ -199,23 +201,15 @@ export default function ImportPage() {
                 <p className="text-sm text-gray-500 mb-4">
                   המערכת תקרא את כל הכרטיסיות ותדלג על הזמנות כפולות אוטומטית ✅
                 </p>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleExcel}
-                  className="block w-full text-sm text-gray-500 file:ml-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700"
-                />
+                <input type="file" accept=".xlsx,.xls" onChange={handleExcel}
+                  className="block w-full text-sm text-gray-500 file:ml-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700" />
               </>
             ) : (
               <>
                 <h2 className="text-lg font-bold mb-2">הדבק טקסט מהקבוצה</h2>
-                <textarea
-                  value={text}
-                  onChange={e => setText(e.target.value)}
+                <textarea value={text} onChange={e => setText(e.target.value)}
                   placeholder="הדבק כאן את הטקסט..."
-                  className="w-full border rounded-lg p-3 text-sm h-48 font-mono"
-                  dir="ltr"
-                />
+                  className="w-full border rounded-lg p-3 text-sm h-48 font-mono" dir="ltr" />
                 <button onClick={handleAnalyze} disabled={!text.trim() || analyzing}
                   className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                   {analyzing ? '🤖 מנתח...' : '🤖 נתח עם AI'}
