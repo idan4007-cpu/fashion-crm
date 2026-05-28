@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Search, Plus, ShoppingBag, Trash2 } from 'lucide-react'
+import { Search, Plus, ShoppingBag, Trash2, Pencil, X, Check } from 'lucide-react'
 
 type Order = {
   id: string
@@ -55,6 +55,8 @@ export default function Orders() {
   const [filterMonth, setFilterMonth] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<Partial<Order>>({})
   const [form, setForm] = useState({
     customer_id: '',
     product: '',
@@ -115,6 +117,26 @@ export default function Orders() {
 
   async function updateStatus(id: string, status: string) {
     await supabase.from('orders').update({ status }).eq('id', id)
+    fetchOrders()
+  }
+
+  function startEdit(o: Order) {
+    setEditingId(o.id)
+    setEditForm({
+      product: o.product,
+      size: o.size,
+      color: o.color,
+      price: o.price,
+      cost_price: o.cost_price,
+      payment_method: o.payment_method,
+      order_date: o.order_date,
+      status: o.status
+    })
+  }
+
+  async function saveEdit(id: string) {
+    await supabase.from('orders').update(editForm).eq('id', id)
+    setEditingId(null)
     fetchOrders()
   }
 
@@ -239,7 +261,6 @@ export default function Orders() {
               onChange={e => setSearch(e.target.value)}
               className="w-full border rounded-lg pr-10 pl-4 py-2 text-sm bg-white" />
           </div>
-
           <select value={filterYear}
             onChange={e => { setFilterYear(e.target.value); setFilterMonth('') }}
             className="border rounded-lg px-3 py-2 text-sm bg-white">
@@ -248,7 +269,6 @@ export default function Orders() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-
           <select value={filterMonth}
             onChange={e => setFilterMonth(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-white"
@@ -258,7 +278,6 @@ export default function Orders() {
               <option key={i} value={String(i)}>{m}</option>
             ))}
           </select>
-
           <select value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-white">
@@ -267,10 +286,8 @@ export default function Orders() {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-
           {(filterYear || filterMonth || filterStatus || search) && (
-            <button
-              onClick={() => { setFilterYear(''); setFilterMonth(''); setFilterStatus(''); setSearch('') }}
+            <button onClick={() => { setFilterYear(''); setFilterMonth(''); setFilterStatus(''); setSearch('') }}
               className="border rounded-lg px-3 py-2 text-sm bg-white text-red-500">
               ✕ נקה פילטרים
             </button>
@@ -312,48 +329,96 @@ export default function Orders() {
           <div className="space-y-3">
             {filtered.map(o => {
               const s = getStatus(o.status)
+              const isEditing = editingId === o.id
+
               return (
                 <div key={o.id} className="bg-white rounded-xl shadow-sm border p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-purple-100 p-2 rounded-full">
-                        <ShoppingBag className="text-purple-600" size={18} />
+                  {isEditing ? (
+                    // מצב עריכה
+                    <div>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <input placeholder="מוצר" value={editForm.product || ''}
+                          onChange={e => setEditForm({...editForm, product: e.target.value})}
+                          className="border rounded-lg px-3 py-2 text-sm col-span-2" />
+                        <input placeholder="מידה" value={editForm.size || ''}
+                          onChange={e => setEditForm({...editForm, size: e.target.value})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
+                        <input placeholder="צבע" value={editForm.color || ''}
+                          onChange={e => setEditForm({...editForm, color: e.target.value})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
+                        <input placeholder="מחיר מכירה" type="number" value={editForm.price || ''}
+                          onChange={e => setEditForm({...editForm, price: parseFloat(e.target.value)})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
+                        <input placeholder="מחיר עלות" type="number" value={editForm.cost_price || ''}
+                          onChange={e => setEditForm({...editForm, cost_price: parseFloat(e.target.value)})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
+                        <input placeholder="אמצעי תשלום" value={editForm.payment_method || ''}
+                          onChange={e => setEditForm({...editForm, payment_method: e.target.value})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
+                        <input type="date" value={editForm.order_date || ''}
+                          onChange={e => setEditForm({...editForm, order_date: e.target.value})}
+                          className="border rounded-lg px-3 py-2 text-sm" />
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-800">#{o.order_number} — {o.customers?.name}</p>
-                        <p className="text-sm text-gray-600">{o.product} {o.size && `| מידה ${o.size}`} {o.color && `| ${o.color}`}</p>
-                        <p className="text-sm text-gray-500">{o.customers?.phone}</p>
-                        {o.order_date && <p className="text-xs text-gray-400">📅 {new Date(o.order_date).toLocaleDateString('he-IL')}</p>}
-                        {o.payment_method && <p className="text-xs text-gray-400">💳 {o.payment_method}</p>}
+                      <div className="flex gap-2">
+                        <button onClick={() => saveEdit(o.id)}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-1">
+                          <Check size={14} /> שמור
+                        </button>
+                        <button onClick={() => setEditingId(null)}
+                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm flex items-center gap-1">
+                          <X size={14} /> ביטול
+                        </button>
                       </div>
                     </div>
-                    <div className="text-left">
-                      <p className="font-bold text-gray-800">₪{o.price}</p>
-                      {o.cost_price > 0 && (
-                        <div className="text-xs mt-1 space-y-0.5">
-                          <p className="text-gray-400">עלות: ₪{o.cost_price}</p>
-                          <p className="text-orange-500">מע"מ: ₪{calcVat(o.price, o.cost_price)}</p>
-                          <p className="text-green-600 font-medium">רווח: ₪{calcProfit(o.price, o.cost_price)}</p>
+                  ) : (
+                    // תצוגה רגילה
+                    <>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-purple-100 p-2 rounded-full">
+                            <ShoppingBag className="text-purple-600" size={18} />
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-800">#{o.order_number} — {o.customers?.name}</p>
+                            <p className="text-sm text-gray-600">{o.product} {o.size && `| מידה ${o.size}`} {o.color && `| ${o.color}`}</p>
+                            <p className="text-sm text-gray-500">{o.customers?.phone}</p>
+                            {o.order_date && <p className="text-xs text-gray-400">📅 {new Date(o.order_date).toLocaleDateString('he-IL')}</p>}
+                            {o.payment_method && <p className="text-xs text-gray-400">💳 {o.payment_method}</p>}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${s.color}`}>{s.label}</span>
-                    <div className="flex items-center gap-2">
-                      <select value={o.status}
-                        onChange={e => updateStatus(o.id, e.target.value)}
-                        className="text-xs border rounded-lg px-2 py-1 bg-white">
-                        {statusOptions.map(s => (
-                          <option key={s.value} value={s.value}>{s.label}</option>
-                        ))}
-                      </select>
-                      <button onClick={() => deleteOrder(o.id)}
-                        className="text-red-400 hover:text-red-600 p-1">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
+                        <div className="text-left">
+                          <p className="font-bold text-gray-800">₪{o.price}</p>
+                          {o.cost_price > 0 && (
+                            <div className="text-xs mt-1 space-y-0.5">
+                              <p className="text-gray-400">עלות: ₪{o.cost_price}</p>
+                              <p className="text-orange-500">מע"מ: ₪{calcVat(o.price, o.cost_price)}</p>
+                              <p className="text-green-600 font-medium">רווח: ₪{calcProfit(o.price, o.cost_price)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${s.color}`}>{s.label}</span>
+                        <div className="flex items-center gap-2">
+                          <select value={o.status}
+                            onChange={e => updateStatus(o.id, e.target.value)}
+                            className="text-xs border rounded-lg px-2 py-1 bg-white">
+                            {statusOptions.map(s => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => startEdit(o)}
+                            className="text-blue-400 hover:text-blue-600 p-1">
+                            <Pencil size={16} />
+                          </button>
+                          <button onClick={() => deleteOrder(o.id)}
+                            className="text-red-400 hover:text-red-600 p-1">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )
             })}
