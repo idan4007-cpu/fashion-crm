@@ -40,17 +40,31 @@ export default function Analytics() {
   }, [])
 
   async function fetchData() {
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('order_date, price, cost_price, payment_method')
-      .not('order_date', 'is', null)
+    // מביא את כל ההזמנות עם pagination
+    let allOrders: any[] = []
+    let from = 0
+    const batchSize = 1000
 
-    if (!orders) { setLoading(false); return }
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('order_date, price, cost_price, payment_method')
+        .not('order_date', 'is', null)
+        .order('order_date', { ascending: false })
+        .range(from, from + batchSize - 1)
+
+      if (error || !data || data.length === 0) break
+      allOrders = [...allOrders, ...data]
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+
+    if (allOrders.length === 0) { setLoading(false); return }
 
     // פילוח לפי שנה וחודש
     const yearMap: Record<string, Record<string, MonthData>> = {}
 
-    for (const o of orders) {
+    for (const o of allOrders) {
       const date = new Date(o.order_date)
       const year = date.getFullYear().toString()
       const month = date.getMonth()
@@ -100,7 +114,7 @@ export default function Analytics() {
 
     // פילוח לפי אמצעי תשלום
     const paymentMap: Record<string, { count: number, total: number }> = {}
-    for (const o of orders) {
+    for (const o of allOrders) {
       const method = o.payment_method || 'לא צוין'
       if (!paymentMap[method]) paymentMap[method] = { count: 0, total: 0 }
       paymentMap[method].count++
@@ -131,10 +145,9 @@ export default function Analytics() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
-          <p className="text-center text-gray-500 py-8">טוען נתונים...</p>
+          <p className="text-center text-gray-500 py-8">⏳ טוען נתונים, אנא המתן...</p>
         ) : (
           <>
-            {/* פילוח לפי אמצעי תשלום */}
             <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
               <h2 className="text-lg font-bold mb-4">💳 פילוח לפי אמצעי תשלום</h2>
               <div className="space-y-3">
@@ -150,12 +163,10 @@ export default function Analytics() {
               </div>
             </div>
 
-            {/* סיכום לפי שנים */}
             <h2 className="text-lg font-bold mb-4">📅 סיכום לפי שנים</h2>
             <div className="space-y-4">
               {years.map(y => (
                 <div key={y.year} className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                  {/* כותרת שנה */}
                   <button
                     onClick={() => setOpenYear(openYear === y.year ? null : y.year)}
                     className="w-full p-4 flex items-center justify-between hover:bg-gray-50">
@@ -171,7 +182,6 @@ export default function Analytics() {
                     </div>
                   </button>
 
-                  {/* פירוט חודשים */}
                   {openYear === y.year && (
                     <div className="border-t">
                       <table className="w-full text-sm">
@@ -196,7 +206,6 @@ export default function Analytics() {
                               <td className="px-4 py-2 text-orange-500">{fmt(m.vat)}</td>
                             </tr>
                           ))}
-                          {/* סיכום שנה */}
                           <tr className="border-t bg-gray-50 font-bold">
                             <td className="px-4 py-2">סה"כ {y.year}</td>
                             <td className="px-4 py-2">{y.totalOrders}</td>
