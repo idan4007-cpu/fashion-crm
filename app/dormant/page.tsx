@@ -22,23 +22,36 @@ export default function Dormant() {
   }, [])
 
   async function fetchData() {
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('customer_id, order_date, price')
-      .not('order_date', 'is', null)
-      .limit(10000)
-
     const { data: customersList } = await supabase
       .from('customers')
       .select('id, name, phone, city')
       .limit(5000)
 
-    if (!orders || !customersList) { setLoading(false); return }
+    if (!customersList) { setLoading(false); return }
+
+    // מביא את כל ההזמנות ממוינות מהחדשה לישנה
+    let allOrders: any[] = []
+    let from = 0
+    const batchSize = 1000
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('customer_id, order_date, price')
+        .not('order_date', 'is', null)
+        .order('order_date', { ascending: false })
+        .range(from, from + batchSize - 1)
+
+      if (error || !data || data.length === 0) break
+      allOrders = [...allOrders, ...data]
+      if (data.length < batchSize) break
+      from += batchSize
+    }
 
     const today = new Date()
 
     const activity: CustomerActivity[] = customersList.map(c => {
-      const customerOrders = orders.filter(o => o.customer_id === c.id)
+      const customerOrders = allOrders.filter(o => o.customer_id === c.id)
       if (customerOrders.length === 0) return null
 
       const dates = customerOrders
@@ -67,7 +80,6 @@ export default function Dormant() {
     setLoading(false)
   }
 
-  // מיון לפי כמות הזמנות (מהגבוה לנמוך)
   const sortByOrders = (list: CustomerActivity[]) =>
     [...list].sort((a, b) => b.total_orders - a.total_orders)
 
@@ -104,13 +116,13 @@ export default function Dormant() {
   )
 
   const Section = ({
-    title, color, bgColor, borderColor, textColor, badgeColor, badgeText, desc, list
+    title, color, bgColor, borderColor, textColor, badgeColor, desc, list
   }: {
     title: string, color: string, bgColor: string, borderColor: string,
-    textColor: string, badgeColor: string, badgeText: string, desc: string,
+    textColor: string, badgeColor: string, desc: string,
     list: CustomerActivity[]
   }) => (
-    <div className={`bg-white rounded-xl shadow-sm border overflow-hidden`}>
+    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
       <div className={`${bgColor} px-5 py-4 border-b ${borderColor}`}>
         <div className="flex items-center justify-between">
           <h2 className={`font-bold ${textColor} text-lg`}>{title}</h2>
@@ -149,7 +161,7 @@ export default function Dormant() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
-          <p className="text-center text-gray-500 py-8">טוען נתונים...</p>
+          <p className="text-center text-gray-500 py-8">⏳ טוען נתונים, אנא המתן...</p>
         ) : (
           <>
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-6 text-sm text-blue-700">
@@ -164,7 +176,6 @@ export default function Dormant() {
                 borderColor="border-red-100"
                 textColor="text-red-700"
                 badgeColor="bg-red-100 text-red-700"
-                badgeText={`${dormantYear.length}`}
                 desc="לא קנו מעל 365 יום — דחוף לעיר!"
                 list={dormantYear}
               />
@@ -175,7 +186,6 @@ export default function Dormant() {
                 borderColor="border-yellow-100"
                 textColor="text-yellow-700"
                 badgeColor="bg-yellow-100 text-yellow-700"
-                badgeText={`${dormant6to12.length}`}
                 desc="לא קנו 6-12 חודשים — כדאי ליצור קשר"
                 list={dormant6to12}
               />
@@ -186,7 +196,6 @@ export default function Dormant() {
                 borderColor="border-green-100"
                 textColor="text-green-700"
                 badgeColor="bg-green-100 text-green-700"
-                badgeText={`${active.length}`}
                 desc="קנו ב-6 חודשים האחרונים — לקוחות פעילים!"
                 list={active}
               />
