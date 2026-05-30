@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Plus, Truck } from 'lucide-react'
+import { Plus, Truck, RefreshCw } from 'lucide-react'
 
 type Shipment = {
   id: string
@@ -36,6 +36,8 @@ export default function Shipments() {
   const [orders, setOrders] = useState<Order[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
   const [form, setForm] = useState({
     order_id: '',
     address: '',
@@ -84,6 +86,26 @@ export default function Shipments() {
     fetchShipments()
   }
 
+  async function syncTrack17() {
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const res = await fetch('/api/analyze/track17', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setSyncMsg('✅ עודכנו ' + data.updated + ' משלוחים!')
+        fetchShipments()
+      } else if (data.message) {
+        setSyncMsg('ℹ️ ' + data.message)
+      } else {
+        setSyncMsg('❌ שגיאה בעדכון')
+      }
+    } catch {
+      setSyncMsg('❌ שגיאה בחיבור')
+    }
+    setSyncing(false)
+  }
+
   const getStatus = (val: string) => statusOptions.find(s => s.value === val) || statusOptions[0]
 
   return (
@@ -96,12 +118,22 @@ export default function Shipments() {
           </div>
           <div className="flex gap-2">
             <a href="/" className="text-sm text-gray-500 px-3 py-2">🏠 דשבורד</a>
+            <button onClick={syncTrack17} disabled={syncing}
+              className="bg-blue-500 text-white px-3 py-2 rounded-lg flex items-center gap-1 text-sm font-medium disabled:opacity-50">
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'מעדכן...' : '17Track'}
+            </button>
             <button onClick={() => setShowForm(!showForm)}
               className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
               <Plus size={16} /> משלוח חדש
             </button>
           </div>
         </div>
+        {syncMsg && (
+          <div className="max-w-4xl mx-auto px-4 pb-3">
+            <p className="text-sm text-center text-gray-600">{syncMsg}</p>
+          </div>
+        )}
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -170,12 +202,15 @@ export default function Shipments() {
                         <p className="text-sm text-gray-500">{s.address}</p>
                         {s.tracking_number && (
                           <p className="text-xs text-blue-600 mt-1">
-                            🔍 {s.tracking_number} {s.courier && `| ${s.courier}`}
+                            🔍 {s.tracking_number} {s.courier && '| ' + s.courier}
                           </p>
                         )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          עודכן: {new Date(s.updated_at).toLocaleDateString('he-IL')}
+                        </p>
                       </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${st.color}`}>
+                    <span className={'text-xs px-2 py-1 rounded-full font-medium ' + st.color}>
                       {st.label}
                     </span>
                   </div>
