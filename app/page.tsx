@@ -48,7 +48,7 @@ export default function Dashboard() {
       .from('orders')
       .select('order_date')
       .not('order_date', 'is', null)
-    
+
     if (data) {
       const years = [...new Set(data.map(o => new Date(o.order_date).getFullYear().toString()))]
         .sort((a, b) => Number(b) - Number(a))
@@ -58,16 +58,21 @@ export default function Dashboard() {
 
   async function fetchStats() {
     const today = new Date().toISOString().split('T')[0]
-    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
 
     const { count: todayCount } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
-      .gte('created_at', today)
+      .eq('order_date', today)
+
+    const { count: monthCount } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .gte('order_date', firstOfMonth)
+      .lte('order_date', today)
 
     const { data: pending } = await supabase.from('orders').select('id').eq('status', 'pending_payment')
     const { data: shipped } = await supabase.from('orders').select('id').eq('status', 'shipped')
-    const { data: revenue } = await supabase.from('payments').select('amount').gte('paid_at', firstOfMonth)
     const { count: totalOrders } = await supabase.from('orders').select('id', { count: 'exact', head: true })
     const { count: totalCustomers } = await supabase.from('customers').select('id', { count: 'exact', head: true })
 
@@ -76,7 +81,7 @@ export default function Dashboard() {
       todayOrders: todayCount || 0,
       pendingPayment: pending?.length || 0,
       shipped: shipped?.length || 0,
-      monthlyRevenue: revenue?.reduce((s, p) => s + (p.amount || 0), 0) || 0,
+      monthlyRevenue: monthCount || 0,
       totalCustomers: totalCustomers || 0,
       totalOrders: totalOrders || 0
     }))
@@ -175,7 +180,6 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* סטטיסטיקות */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
@@ -207,7 +211,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* לקוחות רדומים */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <a href="/dormant" className="bg-red-50 border border-red-200 rounded-xl p-4 hover:bg-red-100 transition">
             <div className="flex items-center gap-3 mb-2">
@@ -227,7 +230,6 @@ export default function Dashboard() {
           </a>
         </div>
 
-        {/* גרפים */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border p-5">
             <div className="flex items-center justify-between mb-4">
@@ -301,7 +303,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* פעולות מהירות */}
         <h2 className="text-lg font-bold text-gray-700 mb-4">פעולות מהירות</h2>
         <div className="grid grid-cols-3 md:grid-cols-7 gap-4">
           <a href="/customers" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-blue-50 transition">
