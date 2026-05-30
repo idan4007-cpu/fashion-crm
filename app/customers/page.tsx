@@ -27,7 +27,6 @@ export default function Customers() {
   useEffect(() => { fetchCustomers() }, [])
 
   async function fetchCustomers() {
-    // מביא את כל הלקוחות עם pagination
     let allCustomers: Customer[] = []
     let from = 0
     const batchSize = 1000
@@ -44,7 +43,6 @@ export default function Customers() {
       from += batchSize
     }
 
-    // מביא את כל ההזמנות לספירה
     let allOrders: { customer_id: string }[] = []
     let ordersFrom = 0
 
@@ -60,7 +58,6 @@ export default function Customers() {
       ordersFrom += batchSize
     }
 
-    // סופר הזמנות לכל לקוח
     const orderCount: Record<string, number> = {}
     for (const o of allOrders) {
       if (o.customer_id) {
@@ -68,7 +65,6 @@ export default function Customers() {
       }
     }
 
-    // ממיין לפי כמות הזמנות מהגבוה לנמוך
     const sorted = allCustomers
       .map(c => ({ ...c, order_count: orderCount[c.id] || 0 }))
       .sort((a, b) => b.order_count - a.order_count)
@@ -85,6 +81,13 @@ export default function Customers() {
       setShowForm(false)
       fetchCustomers()
     }
+  }
+
+  function whatsappLink(phone: string, name: string) {
+    const msg = encodeURIComponent(`היי ${name} 😊`)
+    const clean = phone.replace(/\D/g, '')
+    const intl = clean.startsWith('0') ? '972' + clean.slice(1) : clean
+    return `https://wa.me/${intl}?text=${msg}`
   }
 
   const filtered = customers.filter(c =>
@@ -187,7 +190,7 @@ export default function Customers() {
                       </div>
                       <div>
                         <p className="font-bold text-gray-800">{c.name}</p>
-                        <div className="flex gap-3 mt-1">
+                        <div className="flex gap-3 mt-1 flex-wrap">
                           {c.phone && <span className="flex items-center gap-1 text-xs text-gray-500"><Phone size={12} />{c.phone}</span>}
                           {c.city && <span className="flex items-center gap-1 text-xs text-gray-500"><MapPin size={12} />{c.city}</span>}
                           {c.instagram && <span className="flex items-center gap-1 text-xs text-gray-500"><AtSign size={12} />{c.instagram}</span>}
@@ -198,7 +201,19 @@ export default function Customers() {
                         )}
                       </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.color}`}>{t.label}</span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.color}`}>{t.label}</span>
+                      {c.phone && (
+                        
+                          href={whatsappLink(c.phone, c.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 whitespace-nowrap"
+                        >
+                          📱 וואטסאפ
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
