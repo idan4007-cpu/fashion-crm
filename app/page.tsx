@@ -29,18 +29,42 @@ export default function Dashboard() {
   })
   const [payments, setPayments] = useState<PaymentStat[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthStat[]>([])
+  const [filterYear, setFilterYear] = useState('')
+  const [availableYears, setAvailableYears] = useState<string[]>([])
 
   useEffect(() => {
     fetchStats()
     fetchCharts()
     fetchDormant()
+    fetchYears()
   }, [])
+
+  useEffect(() => {
+    fetchCharts()
+  }, [filterYear])
+
+  async function fetchYears() {
+    const { data } = await supabase
+      .from('orders')
+      .select('order_date')
+      .not('order_date', 'is', null)
+    
+    if (data) {
+      const years = [...new Set(data.map(o => new Date(o.order_date).getFullYear().toString()))]
+        .sort((a, b) => Number(b) - Number(a))
+      setAvailableYears(years)
+    }
+  }
 
   async function fetchStats() {
     const today = new Date().toISOString().split('T')[0]
     const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
-    const { data: todayOrders } = await supabase.from('orders').select('id').gte('created_at', today)
+    const { count: todayCount } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', today)
+
     const { data: pending } = await supabase.from('orders').select('id').eq('status', 'pending_payment')
     const { data: shipped } = await supabase.from('orders').select('id').eq('status', 'shipped')
     const { data: revenue } = await supabase.from('payments').select('amount').gte('paid_at', firstOfMonth)
@@ -49,7 +73,7 @@ export default function Dashboard() {
 
     setStats(prev => ({
       ...prev,
-      todayOrders: todayOrders?.length || 0,
+      todayOrders: todayCount || 0,
       pendingPayment: pending?.length || 0,
       shipped: shipped?.length || 0,
       monthlyRevenue: revenue?.reduce((s, p) => s + (p.amount || 0), 0) || 0,
@@ -96,10 +120,18 @@ export default function Dashboard() {
   }
 
   async function fetchCharts() {
-    const { data: orders } = await supabase
+    let query = supabase
       .from('orders')
-      .select('payment_method, price')
+      .select('payment_method, price, order_date')
       .not('payment_method', 'is', null)
+
+    if (filterYear) {
+      query = query
+        .gte('order_date', `${filterYear}-01-01`)
+        .lte('order_date', `${filterYear}-12-31`)
+    }
+
+    const { data: orders } = await query
 
     if (orders) {
       const map: Record<string, { count: number, total: number }> = {}
@@ -137,13 +169,14 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-800">👗 Fashion CRM</h1>
-          <p className="text-gray-500 text-sm">ברוך הבא, עידן</p>
+          <h1 className="text-2xl font-bold text-gray-800">👗 Brand Fashion</h1>
+          <p className="text-gray-400 text-xs">מערכת ניהול לקוחות</p>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* סטטיסטיקות */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 shadow-sm border">
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-blue-100 p-2 rounded-lg"><ShoppingBag className="text-blue-600" size={20} /></div>
@@ -175,14 +208,14 @@ export default function Dashboard() {
         </div>
 
         {/* לקוחות רדומים */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <a href="/dormant" className="bg-red-50 border border-red-200 rounded-xl p-4 hover:bg-red-100 transition">
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-red-100 p-2 rounded-lg"><Bell className="text-red-500" size={20} /></div>
               <span className="text-red-700 text-sm font-medium">רדום מעל שנה</span>
             </div>
             <p className="text-3xl font-bold text-red-600">{stats.dormantYear}</p>
-            <p className="text-xs text-red-400 mt-1">לקוחות לעיר ← לחץ לפרטים</p>
+            <p className="text-xs text-red-400 mt-1">לחץ לפרטים</p>
           </a>
           <a href="/dormant" className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 hover:bg-yellow-100 transition">
             <div className="flex items-center gap-3 mb-2">
@@ -190,14 +223,24 @@ export default function Dashboard() {
               <span className="text-yellow-700 text-sm font-medium">רדום 6-12 חודשים</span>
             </div>
             <p className="text-3xl font-bold text-yellow-600">{stats.dormant6to12}</p>
-            <p className="text-xs text-yellow-400 mt-1">כדאי ליצור קשר ← לחץ לפרטים</p>
+            <p className="text-xs text-yellow-400 mt-1">לחץ לפרטים</p>
           </a>
         </div>
 
         {/* גרפים */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border p-5">
-            <h2 className="text-lg font-bold mb-4">💳 פילוח אמצעי תשלום</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">💳 פילוח אמצעי תשלום</h2>
+              <select value={filterYear}
+                onChange={e => setFilterYear(e.target.value)}
+                className="border rounded-lg px-2 py-1 text-xs bg-white">
+                <option value="">כל השנים</option>
+                {availableYears.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
             {payments.length > 0 ? (
               <div>
                 <div className="flex justify-center mb-4">
@@ -235,7 +278,7 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <p className="text-gray-400 text-center py-8">אין נתונים עדיין</p>
+              <p className="text-gray-400 text-center py-8">אין נתונים</p>
             )}
           </div>
 
@@ -248,18 +291,19 @@ export default function Dashboard() {
                     <div className="w-full bg-purple-500 rounded-t-sm"
                       style={{ height: `${(m.revenue / maxRevenue) * 100}%`, minHeight: '4px' }}
                       title={`₪${Math.round(m.revenue).toLocaleString()}`} />
-                    <span className="text-xs text-gray-400 rotate-45 origin-left" style={{ fontSize: '9px' }}>{m.month}</span>
+                    <span className="text-xs text-gray-400" style={{ fontSize: '9px' }}>{m.month}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-400 text-center py-8">אין נתונים עדיין</p>
+              <p className="text-gray-400 text-center py-8">אין נתונים</p>
             )}
           </div>
         </div>
 
+        {/* פעולות מהירות */}
         <h2 className="text-lg font-bold text-gray-700 mb-4">פעולות מהירות</h2>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-4">
           <a href="/customers" className="bg-white rounded-xl p-4 shadow-sm border text-center hover:bg-blue-50 transition">
             <Users className="mx-auto mb-2 text-blue-600" size={24} />
             <p className="font-medium text-gray-700 text-sm">לקוחות</p>
