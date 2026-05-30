@@ -121,7 +121,6 @@ export default function ImportPage() {
     let skipped = 0
 
     for (const order of approved) {
-      // בדוק אם מספר הזמנה כבר קיים
       if (order.order_number) {
         const { data: existing } = await supabase
           .from('orders')
@@ -148,10 +147,9 @@ export default function ImportPage() {
       }
 
       if (customerId) {
-        const orderNum = parseInt(order.order_number)
         const { error } = await supabase.from('orders').insert([{
           customer_id: customerId,
-          order_number: !isNaN(orderNum) ? orderNum : undefined,
+          order_number: order.order_number || null,
           product: order.product || 'לא צוין',
           size: order.size || '',
           status: 'new',
@@ -200,7 +198,7 @@ export default function ImportPage() {
               <>
                 <h2 className="text-lg font-bold mb-2">העלה קובץ Excel</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  המערכת תשמור את מספרי ההזמנה המקוריים ✅
+                  תומך במספרי הזמנה מכל סוג (מספרים, טקסט, שם+מספר) ✅
                 </p>
                 <input type="file" accept=".xlsx,.xls" onChange={handleExcel}
                   className="block w-full text-sm text-gray-500 file:ml-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700" />
@@ -272,7 +270,7 @@ export default function ImportPage() {
                             }} />
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-500">{o.order_date}</td>
-                        <td className="px-3 py-2">#{o.order_number}</td>
+                        <td className="px-3 py-2 text-xs">#{o.order_number}</td>
                         <td className="px-3 py-2">{o.name}</td>
                         <td className="px-3 py-2">{o.product}</td>
                         <td className="px-3 py-2 text-xs">{o.payment}</td>
