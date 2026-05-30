@@ -16,6 +16,31 @@ type MonthStat = {
 
 const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899']
 
+async function fetchAllOrders(selectFields: string, extraFilters?: (q: any) => any) {
+  let allData: any[] = []
+  let from = 0
+  const batchSize = 1000
+
+  while (true) {
+    let query = supabase
+      .from('orders')
+      .select(selectFields)
+      .not('order_date', 'is', null)
+      .order('order_date', { ascending: false })
+      .range(from, from + batchSize - 1)
+
+    if (extraFilters) query = extraFilters(query)
+
+    const { data, error } = await query
+    if (error || !data || data.length === 0) break
+    allData = [...allData, ...data]
+    if (data.length < batchSize) break
+    from += batchSize
+  }
+
+  return allData
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState({
     todayOrders: 0,
@@ -34,7 +59,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats()
-    fetchCharts()
     fetchDormant()
     fetchYears()
   }, [])
@@ -44,16 +68,11 @@ export default function Dashboard() {
   }, [filterYear])
 
   async function fetchYears() {
-    const { data } = await supabase
-      .from('orders')
-      .select('order_date')
-      .not('order_date', 'is', null)
-
-    if (data) {
-      const years = [...new Set(data.map(o => new Date(o.order_date).getFullYear().toString()))]
-        .sort((a, b) => Number(b) - Number(a))
-      setAvailableYears(years)
-    }
+    const data = await fetchAllOrders('order_date')
+    const years = [...new Set(data.map((o: any) => new Date(o.order_date).getFullYear().toString()))]
+      .sort((a, b) => Number(b) - Number(a))
+    setAvailableYears(years)
+    if (!filterYear && years.length > 0) fetchCharts()
   }
 
   async function fetchStats() {
@@ -88,11 +107,7 @@ export default function Dashboard() {
   }
 
   async function fetchDormant() {
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('customer_id, order_date')
-      .not('order_date', 'is', null)
-      .limit(10000)
+    const orders = await fetchAllOrders('customer_id, order_date')
 
     const { data: customers } = await supabase
       .from('customers')
@@ -106,13 +121,13 @@ export default function Dashboard() {
     let dormant6to12 = 0
 
     for (const c of customers) {
-      const customerOrders = orders.filter(o => o.customer_id === c.id)
+      const customerOrders = orders.filter((o: any) => o.customer_id === c.id)
       if (customerOrders.length === 0) continue
 
       const dates = customerOrders
-        .map(o => new Date(o.order_date))
-        .filter(d => !isNaN(d.getTime()))
-        .sort((a, b) => b.getTime() - a.getTime())
+        .map((o: any) => new Date(o.order_date))
+        .filter((d: Date) => !isNaN(d.getTime()))
+        .sort((a: Date, b: Date) => b.getTime() - a.getTime())
 
       if (dates.length === 0) continue
 
@@ -125,22 +140,17 @@ export default function Dashboard() {
   }
 
   async function fetchCharts() {
-    let query = supabase
-      .from('orders')
-      .select('payment_method, price, order_date')
-      .not('payment_method', 'is', null)
-
-    if (filterYear) {
-      query = query
+    const orders = await fetchAllOrders(
+      'payment_method, price, order_date',
+      filterYear ? (q: any) => q
         .gte('order_date', `${filterYear}-01-01`)
-        .lte('order_date', `${filterYear}-12-31`)
-    }
-
-    const { data: orders } = await query
+        .lte('order_date', `${filterYear}-12-31`) : undefined
+    )
 
     if (orders) {
       const map: Record<string, { count: number, total: number }> = {}
       for (const o of orders) {
+        if (!o.payment_method) continue
         const m = o.payment_method || 'אחר'
         if (!map[m]) map[m] = { count: 0, total: 0 }
         map[m].count++
@@ -149,11 +159,11 @@ export default function Dashboard() {
       setPayments(Object.entries(map).map(([method, d]) => ({ method, ...d })).sort((a, b) => b.count - a.count))
     }
 
-    const { data: monthly } = await supabase
-      .from('orders')
-      .select('order_date, price')
-      .not('order_date', 'is', null)
-      .gte('order_date', new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0])
+    const oneYearAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]
+    const monthly = await fetchAllOrders(
+      'order_date, price',
+      (q: any) => q.gte('order_date', oneYearAgo)
+    )
 
     if (monthly) {
       const months: Record<string, number> = {}
