@@ -12,6 +12,7 @@ type Customer = {
   notes: string
   type: 'new' | 'returning' | 'vip'
   created_at: string
+  order_count?: number
 }
 
 export default function Customers() {
@@ -26,11 +27,53 @@ export default function Customers() {
   useEffect(() => { fetchCustomers() }, [])
 
   async function fetchCustomers() {
-    const { data } = await supabase
-      .from('customers')
-      .select('*')
-      .order('created_at', { ascending: false })
-    setCustomers(data || [])
+    // מביא את כל הלקוחות עם pagination
+    let allCustomers: Customer[] = []
+    let from = 0
+    const batchSize = 1000
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .range(from, from + batchSize - 1)
+
+      if (error || !data || data.length === 0) break
+      allCustomers = [...allCustomers, ...data]
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+
+    // מביא את כל ההזמנות לספירה
+    let allOrders: { customer_id: string }[] = []
+    let ordersFrom = 0
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('customer_id')
+        .range(ordersFrom, ordersFrom + batchSize - 1)
+
+      if (error || !data || data.length === 0) break
+      allOrders = [...allOrders, ...data]
+      if (data.length < batchSize) break
+      ordersFrom += batchSize
+    }
+
+    // סופר הזמנות לכל לקוח
+    const orderCount: Record<string, number> = {}
+    for (const o of allOrders) {
+      if (o.customer_id) {
+        orderCount[o.customer_id] = (orderCount[o.customer_id] || 0) + 1
+      }
+    }
+
+    // ממיין לפי כמות הזמנות מהגבוה לנמוך
+    const sorted = allCustomers
+      .map(c => ({ ...c, order_count: orderCount[c.id] || 0 }))
+      .sort((a, b) => b.order_count - a.order_count)
+
+    setCustomers(sorted)
     setLoading(false)
   }
 
@@ -128,7 +171,7 @@ export default function Customers() {
         </div>
 
         {loading ? (
-          <p className="text-center text-gray-500 py-8">טוען...</p>
+          <p className="text-center text-gray-500 py-8">⏳ טוען את כל הלקוחות...</p>
         ) : filtered.length === 0 ? (
           <p className="text-center text-gray-500 py-8">אין לקוחות עדיין</p>
         ) : (
@@ -150,6 +193,9 @@ export default function Customers() {
                           {c.instagram && <span className="flex items-center gap-1 text-xs text-gray-500"><AtSign size={12} />{c.instagram}</span>}
                         </div>
                         {c.notes && <p className="text-xs text-gray-400 mt-1">{c.notes}</p>}
+                        {c.order_count !== undefined && c.order_count > 0 && (
+                          <p className="text-xs font-bold text-purple-600 mt-1">🛍️ {c.order_count} הזמנות</p>
+                        )}
                       </div>
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.color}`}>{t.label}</span>
