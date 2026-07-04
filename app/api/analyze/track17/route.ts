@@ -13,17 +13,34 @@ async function syncShipments() {
   try {
     const apiKey = process.env.TRACK17_API_KEY
 
-    // מושך את כל המשלוחים מ-17Track
-    const response = await fetch('https://api.17track.net/track/v2.2/gettracklist', {
+    const { data: shipments } = await supabase
+      .from('shipments')
+      .select('id, tracking_number')
+      .not('tracking_number', 'is', null)
+      .neq('status', 'delivered')
+
+    if (!shipments || shipments.length === 0) {
+      return NextResponse.json({ message: 'אין משלוחים לבדיקה' })
+    }
+
+    const trackingNumbers = shipments.map(s => ({ number: s.tracking_number }))
+
+    await fetch('https://api.17track.net/track/v2.2/register', {
       method: 'POST',
       headers: {
         '17token': apiKey!,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        page_no: 1,
-        page_size: 100
-      })
+      body: JSON.stringify(trackingNumbers)
+    })
+
+    const response = await fetch('https://api.17track.net/track/v2.2/gettrackinfo', {
+      method: 'POST',
+      headers: {
+        '17token': apiKey!,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(trackingNumbers)
     })
 
     const data = await response.json()
@@ -32,65 +49,27 @@ async function syncShipments() {
       return NextResponse.json({ error: 'שגיאה מ-17Track', data })
     }
 
-    let imported = 0
     let updated = 0
 
     for (const item of data.data.accepted) {
-      const trackingNumber = item.number
+      const tracking = item.number
       const tag = item.track?.z0?.z
-      const friendlyName = item.friendly_name || ''
 
-      // חילוץ מספר הזמנה מהשם: "order 11527-Rima daniel-..."
-      const orderMatch = friendlyName.match(/order\s+(\d+)/i)
-      if (!orderMatch) continue
-      const orderNumber = parseInt(orderMatch[1])
+      let status = 'in_transit'
+      if (tag === 30 || tag === 50) status = 'delivered'
+      if (tag === 35) status = 'undelivered'
 
-      // מציאת ההזמנה במערכת
-      const { data: orderData } = await supabase
-        .from('orders')
-        .select('id')
-        .eq('order_number', orderNumber)
-        .single()
-
-      if (!orderData) continue
-
-      // סטטוס
-      let status = 'pending'
-      if (tag === 40) status = 'in_transit'
-      if (tag === 30) status = 'delivered'
-      if (tag === 50) status = 'delivered'
-
-      // בדיקה אם משלוח קיים
-      const { data: existing } = await supabase
-        .from('shipments')
-        .select('id')
-        .eq('tracking_number', trackingNumber)
-        .single()
-
-      if (existing) {
-        // עדכון סטטוס
+      const shipment = shipments.find(s => s.tracking_number === tracking)
+      if (shipment) {
         await supabase
           .from('shipments')
           .update({ status, updated_at: new Date().toISOString() })
-          .eq('id', existing.id)
+          .eq('id', shipment.id)
         updated++
-      } else {
-        // הוספה חדשה
-        await supabase
-          .from('shipments')
-          .insert([{
-            order_id: orderData.id,
-            tracking_number: trackingNumber,
-            courier: item.carrier || 'FedEx',
-            status,
-            address: '',
-            updated_at: new Date().toISOString()
-          }])
-        imported++
       }
     }
 
-    return NextResponse.json({ success: true, imported, updated })
+    return NextResponse.json({ success: true, updated })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
