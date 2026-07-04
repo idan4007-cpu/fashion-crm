@@ -23,7 +23,10 @@ async function syncShipments() {
       return NextResponse.json({ message: 'אין משלוחים לבדיקה' })
     }
 
-    const trackingNumbers = shipments.map(s => ({ number: s.tracking_number }))
+    const trackingNumbers = shipments.map(s => ({ 
+      number: s.tracking_number,
+      carrier: 100002
+    }))
 
     await fetch('https://api.17track.net/track/v2.2/register', {
       method: 'POST',
