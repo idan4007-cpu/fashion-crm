@@ -1,11 +1,11 @@
 -- Merge duplicate customers (same phone digits), remove identical duplicate
 -- orders, and add unique indexes so duplicates can't be created again.
-begin;
+-- Every statement stands alone (the Supabase SQL editor may run them on
+-- separate connections), and the whole script is safe to run again.
 
--- 1. Customers with the same phone: keep the one with most orders (then oldest),
---    move all orders to it, delete the rest.
-create temp table merge_map on commit drop as
-select id, keeper from (
+-- 1a. Move orders from duplicate customers to the "keeper"
+--     (the one with most orders, then the oldest).
+with ranked as (
   select id,
          row_number()  over w as rn,
          first_value(id) over w as keeper
@@ -16,11 +16,26 @@ select id, keeper from (
     where c.phone is not null and regexp_replace(c.phone, '\D', '', 'g') <> ''
   ) x
   window w as (partition by p order by n desc, created_at, id::text)
-) r
-where rn > 1;
+)
+update orders o set customer_id = r.keeper
+from ranked r
+where o.customer_id = r.id and r.rn > 1;
 
-update orders o set customer_id = m.keeper from merge_map m where o.customer_id = m.id;
-delete from customers where id in (select id from merge_map);
+-- 1b. Delete the duplicate customers (they have no orders left now).
+with ranked as (
+  select id,
+         row_number() over (partition by p order by n desc, created_at, id::text) as rn,
+         n
+  from (
+    select c.id, c.created_at, regexp_replace(c.phone, '\D', '', 'g') as p,
+           (select count(*) from orders o where o.customer_id = c.id) as n
+    from customers c
+    where c.phone is not null and regexp_replace(c.phone, '\D', '', 'g') <> ''
+  ) x
+)
+delete from customers c
+using ranked r
+where c.id = r.id and r.rn > 1 and r.n = 0;
 
 -- 2. Identical orders (same number, customer, product, size, color, price):
 --    keep one (prefer the one linked to a shipment), delete the rest.
@@ -45,8 +60,6 @@ create unique index if not exists customers_phone_unique
 create unique index if not exists orders_no_duplicate_items
   on orders (order_number, customer_id, product, size, color) nulls not distinct
   where order_number is not null;
-
-commit;
 
 -- Check: both should be 0
 select
