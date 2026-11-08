@@ -20,6 +20,12 @@ type ParsedOrder = {
   approved: boolean
 }
 
+// YYYY-MM-DD in local (Israel) time. toISOString() uses UTC, which shifts
+// local midnight back to the previous day.
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function parseDate(raw: any): string {
   if (!raw) return ''
   try {
@@ -31,10 +37,10 @@ function parseDate(raw: any): string {
       const month = parseInt(dotMatch[2]) - 1
       const day = parseInt(dotMatch[1])
       const d = new Date(year, month, day)
-      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+      if (!isNaN(d.getTime())) return localDate(d)
     }
     const d = new Date(raw)
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+    if (!isNaN(d.getTime())) return localDate(d)
   } catch { }
   return ''
 }
@@ -119,7 +125,7 @@ export default function ImportPage() {
         product: globalProduct || '',
         price: parseFloat(globalPrice) || 0,
         cost: parseFloat(globalCost) || 0,
-        order_date: new Date().toISOString().split('T')[0]
+        order_date: localDate(new Date())
       })))
     } catch {
       alert('שגיאה בניתוח')

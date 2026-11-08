@@ -59,8 +59,10 @@ export default function Dashboard() {
   }
 
   async function fetchStats() {
-    const today = new Date().toISOString().split('T')[0]
-    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+    const n = new Date()
+    const ym = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+    const today = `${ym}-${String(n.getDate()).padStart(2, '0')}`
+    const firstOfMonth = `${ym}-01`
 
     const { count: todayCount } = await supabase
       .from('orders')
@@ -145,22 +147,33 @@ export default function Dashboard() {
       setPayments(Object.entries(map).map(([method, d]) => ({ method, ...d })).sort((a, b) => b.count - a.count))
     }
 
-    const oneYearAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]
+    // 12 fixed monthly buckets, oldest → newest, ending with the current month
+    const now = new Date()
+    const monthNames = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
+    const buckets: { key: string; month: string; revenue: number }[] = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        month: `${monthNames[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+        revenue: 0,
+      })
+    }
+    const fromDate = `${buckets[0].key}-01`
+    const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const toStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
+
     const monthly = await fetchAllOrders(
       'order_date, price',
-      (q: any) => q.gte('order_date', oneYearAgo)
+      (q: any) => q.gte('order_date', fromDate).lte('order_date', toStr)
     )
 
-    if (monthly) {
-      const months: Record<string, number> = {}
-      const monthNames = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
-      for (const o of monthly) {
-        const d = new Date(o.order_date)
-        const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(2)}`
-        months[key] = (months[key] || 0) + (o.price || 0)
-      }
-      setMonthlyStats(Object.entries(months).map(([month, revenue]) => ({ month, revenue })).slice(-12))
+    const byKey = new Map(buckets.map(b => [b.key, b]))
+    for (const o of monthly as any[]) {
+      const b = byKey.get(String(o.order_date).slice(0, 7))
+      if (b) b.revenue += Number(o.price) || 0
     }
+    setMonthlyStats(buckets.some(b => b.revenue > 0) ? buckets.map(({ month, revenue }) => ({ month, revenue })) : [])
   }
 
   const totalPayments = payments.reduce((s, p) => s + p.count, 0)
@@ -283,13 +296,16 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-sm border p-5">
             <h2 className="text-lg font-bold mb-4">📈 הכנסות 12 חודשים אחרונים</h2>
             {monthlyStats.length > 0 ? (
-              <div className="flex items-end gap-1 h-40">
+              <div className="flex items-end gap-1" dir="ltr">
                 {monthlyStats.map((m, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div key={i} className="flex-1 min-w-0 flex flex-col items-center gap-1">
+                    <span className="text-gray-500 whitespace-nowrap" style={{ fontSize: '9px' }}>
+                      {m.revenue >= 1000 ? `${Math.round(m.revenue / 1000)}K` : m.revenue > 0 ? Math.round(m.revenue) : ''}
+                    </span>
                     <div className="w-full bg-purple-500 rounded-t-sm"
-                      style={{ height: `${(m.revenue / maxRevenue) * 100}%`, minHeight: '4px' }}
-                      title={`₪${Math.round(m.revenue).toLocaleString()}`} />
-                    <span className="text-xs text-gray-400" style={{ fontSize: '9px' }}>{m.month}</span>
+                      style={{ height: `${Math.max((m.revenue / maxRevenue) * 140, m.revenue > 0 ? 4 : 1)}px` }}
+                      title={`${m.month}: ₪${Math.round(m.revenue).toLocaleString()}`} />
+                    <span className="text-gray-400 whitespace-nowrap" style={{ fontSize: '9px' }}>{m.month}</span>
                   </div>
                 ))}
               </div>
