@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { SupabaseClient } from '@supabase/supabase-js'
+import { getCronClient, getUserClient, unauthorized } from '@/lib/serverAuth'
 
+// GET is used by Vercel Cron (needs CRON_SECRET + SUPABASE_SERVICE_ROLE_KEY)
 export async function GET(req: NextRequest) {
-  return await syncShipments()
+  const supabase = getCronClient(req)
+  if (!supabase) return unauthorized()
+  return await syncShipments(supabase)
 }
 
+// POST is used by the "sync" button in the app (logged-in user)
 export async function POST(req: NextRequest) {
-  return await syncShipments()
+  const supabase = await getUserClient(req)
+  if (!supabase) return unauthorized()
+  return await syncShipments(supabase)
 }
 
-async function syncShipments() {
+async function syncShipments(supabase: SupabaseClient) {
   try {
     const apiKey = process.env.TRACK17_API_KEY
 

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authFetch } from '@/lib/authFetch'
 import { Plus, Truck, RefreshCw } from 'lucide-react'
 
 type Shipment = {
@@ -90,7 +91,7 @@ export default function Shipments() {
     setSyncing(true)
     setSyncMsg('')
     try {
-      const res = await fetch('/api/analyze/track17', { method: 'POST' })
+      const res = await authFetch('/api/analyze/track17', { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         setSyncMsg('✅ עודכנו ' + data.updated + ' משלוחים!')

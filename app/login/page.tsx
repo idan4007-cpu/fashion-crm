@@ -1,20 +1,25 @@
 'use client'
 import { useState } from 'react'
-
-const CORRECT_PASSWORD = 'Daniel859'
+import { supabase } from '@/lib/supabase'
 
 export default function Login() {
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [show, setShow] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  function handleLogin() {
-    if (password === CORRECT_PASSWORD) {
-      localStorage.setItem('crm_auth', 'true')
-      window.location.href = '/'
-    } else {
-      setError('סיסמה שגויה')
+  async function handleLogin() {
+    if (!email || !password) return
+    setLoading(true)
+    setError('')
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    setLoading(false)
+    if (error) {
+      setError('אימייל או סיסמה שגויים')
+      return
     }
+    window.location.href = '/'
   }
 
   return (
@@ -23,13 +28,25 @@ export default function Login() {
         <div className="text-center mb-8">
           <p className="text-4xl mb-3">👗</p>
           <h1 className="text-2xl font-bold text-gray-800">Fashion CRM</h1>
-          <p className="text-gray-500 text-sm mt-1">הכנס סיסמה להמשך</p>
+          <p className="text-gray-500 text-sm mt-1">התחבר כדי להמשיך</p>
         </div>
+
+        <input
+          type="email"
+          placeholder="אימייל"
+          autoComplete="username"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+          className="w-full border rounded-xl px-4 py-3 text-sm text-center mb-3"
+          dir="ltr"
+        />
 
         <div className="relative mb-3">
           <input
             type={show ? 'text' : 'password'}
             placeholder="סיסמה"
+            autoComplete="current-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
@@ -46,8 +63,9 @@ export default function Login() {
 
         <button
           onClick={handleLogin}
-          className="w-full bg-purple-600 text-white py-3 rounded-xl text-sm font-bold">
-          כניסה
+          disabled={loading}
+          className="w-full bg-purple-600 text-white py-3 rounded-xl text-sm font-bold disabled:opacity-60">
+          {loading ? 'מתחבר...' : 'כניסה'}
         </button>
       </div>
     </div>

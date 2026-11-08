@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient, unauthorized } from '@/lib/serverAuth'
 
 function splitToChunks(text: string, chunkSize: number = 3000): string[] {
   const lines = text.split('\n')
@@ -18,6 +19,7 @@ function splitToChunks(text: string, chunkSize: number = 3000): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await getUserClient(req))) return unauthorized()
   try {
     const { text } = await req.json()
     const chunks = splitToChunks(text)

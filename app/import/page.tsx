@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authFetch } from '@/lib/authFetch'
 import * as XLSX from 'xlsx'
 
 type ParsedOrder = {
@@ -106,7 +107,7 @@ export default function ImportPage() {
     if (!text.trim()) return
     setAnalyzing(true)
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await authFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
