@@ -145,7 +145,8 @@ export default function ImportPage() {
           .from('orders')
           .select('id')
           .eq('order_number', order.order_number)
-          .single()
+          .limit(1)
+          .maybeSingle()
         if (existing) { skipped++; continue }
       }
 
@@ -153,7 +154,7 @@ export default function ImportPage() {
       const phone = order.phone?.toString().replace(/\D/g, '') || ''
       if (phone) {
         const { data: existingCustomer } = await supabase
-          .from('customers').select('id').eq('phone', phone).single()
+          .from('customers').select('id').eq('phone', phone).limit(1).maybeSingle()
         if (existingCustomer) {
           customerId = existingCustomer.id
         } else {

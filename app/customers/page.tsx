@@ -55,6 +55,10 @@ export default function Customers() {
      setForm({ name: '', phone: '', instagram: '', city: '', notes: '', type: 'new' })
      setShowForm(false)
      fetchCustomers()
+   } else if (error.code === '23505') {
+     alert('כבר קיימת לקוחה עם מספר הטלפון הזה')
+   } else {
+     alert('שגיאה בשמירה: ' + error.message)
    }
  }
 
