@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { authFetch } from '@/lib/authFetch'
 import { Plus, Truck, RefreshCw } from 'lucide-react'
 
@@ -53,20 +54,18 @@ export default function Shipments() {
   }, [])
 
   async function fetchShipments() {
-    const { data } = await supabase
-      .from('shipments')
-      .select('*, orders(order_number, product, customers(name, phone))')
-      .order('updated_at', { ascending: false })
-    setShipments((data as unknown as Shipment[]) || [])
+    setShipments(await fetchAll<Shipment>(
+      'shipments', '*, orders(order_number, product, customers(name, phone))',
+      q => q.order('updated_at', { ascending: false })
+    ))
     setLoading(false)
   }
 
   async function fetchOrders() {
-    const { data } = await supabase
-      .from('orders')
-      .select('id, order_number, product, customers(name, phone)')
-      .eq('status', 'paid')
-    setOrders((data as unknown as Order[]) || [])
+    setOrders(await fetchAll<Order>(
+      'orders', 'id, order_number, product, customers(name, phone)',
+      q => q.eq('status', 'paid')
+    ))
   }
 
   async function addShipment() {

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { ShoppingBag, Users, Clock, TrendingUp, Package, CreditCard, BarChart2, Bell } from 'lucide-react'
 
 type PaymentStat = {
@@ -17,28 +18,10 @@ type MonthStat = {
 const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899']
 
 async function fetchAllOrders(selectFields: string, extraFilters?: (q: any) => any) {
-  let allData: any[] = []
-  let from = 0
-  const batchSize = 1000
-
-  while (true) {
-    let query = supabase
-      .from('orders')
-      .select(selectFields)
-      .not('order_date', 'is', null)
-      .order('order_date', { ascending: false })
-      .range(from, from + batchSize - 1)
-
-    if (extraFilters) query = extraFilters(query)
-
-    const { data, error } = await query
-    if (error || !data || data.length === 0) break
-    allData = [...allData, ...data]
-    if (data.length < batchSize) break
-    from += batchSize
-  }
-
-  return allData
+  return fetchAll('orders', selectFields, q => {
+    q = q.not('order_date', 'is', null).order('order_date', { ascending: false })
+    return extraFilters ? extraFilters(q) : q
+  })
 }
 
 export default function Dashboard() {
@@ -90,16 +73,16 @@ export default function Dashboard() {
       .gte('order_date', firstOfMonth)
       .lte('order_date', today)
 
-    const { data: pending } = await supabase.from('orders').select('id').eq('status', 'pending_payment')
-    const { data: shipped } = await supabase.from('orders').select('id').eq('status', 'shipped')
+    const { count: pending } = await supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_payment')
+    const { count: shipped } = await supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'shipped')
     const { count: totalOrders } = await supabase.from('orders').select('id', { count: 'exact', head: true })
     const { count: totalCustomers } = await supabase.from('customers').select('id', { count: 'exact', head: true })
 
     setStats(prev => ({
       ...prev,
       todayOrders: todayCount || 0,
-      pendingPayment: pending?.length || 0,
-      shipped: shipped?.length || 0,
+      pendingPayment: pending || 0,
+      shipped: shipped || 0,
       monthlyRevenue: monthCount || 0,
       totalCustomers: totalCustomers || 0,
       totalOrders: totalOrders || 0
@@ -109,10 +92,7 @@ export default function Dashboard() {
   async function fetchDormant() {
     const orders = await fetchAllOrders('customer_id, order_date')
 
-    const { data: customers } = await supabase
-      .from('customers')
-      .select('id')
-      .limit(5000)
+    const customers = await fetchAll('customers', 'id')
 
     if (!orders || !customers) return
 
@@ -120,8 +100,14 @@ export default function Dashboard() {
     let dormantYear = 0
     let dormant6to12 = 0
 
-    for (const c of customers) {
-      const customerOrders = orders.filter((o: any) => o.customer_id === c.id)
+    const byCustomer = new Map<string, any[]>()
+    for (const o of orders as any[]) {
+      const list = byCustomer.get(o.customer_id)
+      if (list) list.push(o); else byCustomer.set(o.customer_id, [o])
+    }
+
+    for (const c of customers as any[]) {
+      const customerOrders = byCustomer.get(c.id) || []
       if (customerOrders.length === 0) continue
 
       const dates = customerOrders

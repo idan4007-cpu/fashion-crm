@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 
 type MonthData = {
   month: string
@@ -41,23 +42,10 @@ export default function Analytics() {
 
   async function fetchData() {
     // מביא את כל ההזמנות עם pagination
-    let allOrders: any[] = []
-    let from = 0
-    const batchSize = 1000
-
-    while (true) {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('order_date, price, cost_price, payment_method')
-        .not('order_date', 'is', null)
-        .order('order_date', { ascending: false })
-        .range(from, from + batchSize - 1)
-
-      if (error || !data || data.length === 0) break
-      allOrders = [...allOrders, ...data]
-      if (data.length < batchSize) break
-      from += batchSize
-    }
+    const allOrders = await fetchAll(
+      'orders', 'order_date, price, cost_price, payment_method',
+      q => q.not('order_date', 'is', null).order('order_date', { ascending: false })
+    )
 
     if (allOrders.length === 0) { setLoading(false); return }
 

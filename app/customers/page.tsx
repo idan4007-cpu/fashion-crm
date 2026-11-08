@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { Search, Plus, User, Phone, AtSign, MapPin } from 'lucide-react'
 
 type Customer = {
@@ -27,34 +28,10 @@ export default function Customers() {
  useEffect(() => { fetchCustomers() }, [])
 
  async function fetchCustomers() {
-   let allCustomers: Customer[] = []
-   let from = 0
-   const batchSize = 1000
-
-   while (true) {
-     const { data, error } = await supabase
-       .from('customers')
-       .select('*')
-       .range(from, from + batchSize - 1)
-     if (error || !data || data.length === 0) break
-     allCustomers = [...allCustomers, ...data]
-     if (data.length < batchSize) break
-     from += batchSize
-   }
-
-   let allOrders: { customer_id: string }[] = []
-   let ordersFrom = 0
-
-   while (true) {
-     const { data, error } = await supabase
-       .from('orders')
-       .select('customer_id')
-       .range(ordersFrom, ordersFrom + batchSize - 1)
-     if (error || !data || data.length === 0) break
-     allOrders = [...allOrders, ...data]
-     if (data.length < batchSize) break
-     ordersFrom += batchSize
-   }
+   const [allCustomers, allOrders] = await Promise.all([
+     fetchAll<Customer>('customers', '*'),
+     fetchAll<{ customer_id: string }>('orders', 'customer_id'),
+   ])
 
    const orderCount: Record<string, number> = {}
    for (const o of allOrders) {

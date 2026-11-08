@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 
 type CustomerActivity = {
   id: string
@@ -22,36 +23,27 @@ export default function Dormant() {
   }, [])
 
   async function fetchData() {
-    const { data: customersList } = await supabase
-      .from('customers')
-      .select('id, name, phone, city')
-      .limit(5000)
+    const customersList = await fetchAll<{ id: string; name: string; phone: string; city: string }>(
+      'customers', 'id, name, phone, city'
+    )
 
-    if (!customersList) { setLoading(false); return }
+    if (customersList.length === 0) { setLoading(false); return }
 
     // מביא את כל ההזמנות ממוינות מהחדשה לישנה
-    let allOrders: any[] = []
-    let from = 0
-    const batchSize = 1000
-
-    while (true) {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('customer_id, order_date, price')
-        .not('order_date', 'is', null)
-        .order('order_date', { ascending: false })
-        .range(from, from + batchSize - 1)
-
-      if (error || !data || data.length === 0) break
-      allOrders = [...allOrders, ...data]
-      if (data.length < batchSize) break
-      from += batchSize
+    const allOrders = await fetchAll<{ customer_id: string; order_date: string; price: number }>(
+      'orders', 'customer_id, order_date, price',
+      q => q.not('order_date', 'is', null).order('order_date', { ascending: false })
+    )
+    const ordersByCustomer = new Map<string, typeof allOrders>()
+    for (const o of allOrders) {
+      const list = ordersByCustomer.get(o.customer_id)
+      if (list) list.push(o); else ordersByCustomer.set(o.customer_id, [o])
     }
 
     const today = new Date()
 
     const activity: CustomerActivity[] = customersList.map(c => {
-      const customerOrders = allOrders.filter(o => o.customer_id === c.id)
+      const customerOrders = ordersByCustomer.get(c.id) || []
       if (customerOrders.length === 0) return null
 
       const dates = customerOrders

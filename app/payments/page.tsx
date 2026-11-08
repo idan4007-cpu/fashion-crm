@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { Search, Plus, ShoppingBag } from 'lucide-react'
 
 type Order = {
@@ -67,17 +68,12 @@ export default function Orders() {
   }, [])
 
   async function fetchOrders() {
-    const { data } = await supabase
-      .from('orders')
-      .select('*, customers(name, phone)')
-      .order('created_at', { ascending: false })
-    setOrders(data || [])
+    setOrders(await fetchAll('orders', '*, customers(name, phone)', q => q.order('created_at', { ascending: false })))
     setLoading(false)
   }
 
   async function fetchCustomers() {
-    const { data } = await supabase.from('customers').select('id, name, phone')
-    setCustomers(data || [])
+    setCustomers(await fetchAll('customers', 'id, name, phone', q => q.order('name')))
   }
 
   async function addOrder() {

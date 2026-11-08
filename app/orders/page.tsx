@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/fetchAll'
 import { Search, Plus, ShoppingBag, Trash2, Pencil, X, Check } from 'lucide-react'
 
 type Order = {
@@ -77,30 +78,17 @@ export default function Orders() {
  }, [])
 
  async function fetchOrders() {
-   let allOrders: Order[] = []
-   let from = 0
-   const batchSize = 1000
-
-   while (true) {
-     const { data, error } = await supabase
-       .from('orders')
-       .select('*, customers(name, phone)')
-       .order('created_at', { ascending: false })
-       .range(from, from + batchSize - 1)
-
-     if (error || !data || data.length === 0) break
-     allOrders = [...allOrders, ...data]
-     if (data.length < batchSize) break
-     from += batchSize
-   }
+   const allOrders = await fetchAll<Order>(
+     'orders', '*, customers(name, phone)',
+     q => q.order('created_at', { ascending: false })
+   )
 
    setOrders(allOrders)
    setLoading(false)
  }
 
  async function fetchCustomers() {
-   const { data } = await supabase.from('customers').select('id, name, phone')
-   setCustomers(data || [])
+   setCustomers(await fetchAll('customers', 'id, name, phone', q => q.order('name')))
  }
 
  async function addOrder() {
